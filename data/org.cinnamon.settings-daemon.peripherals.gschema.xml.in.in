@@ -20,6 +20,12 @@
       <_summary>Disable touchpad while typing</_summary>
       <_description>Set this to TRUE if you have problems with accidentally hitting the touchpad while typing.</_description>
     </key>
+    <key name="disable-when-external-device-attached" type="b">
+      <default>false</default>
+      <_summary>Disable touchpad when a mouse is attached</_summary>
+      <_description>Set this to true to always disable the touchpad when an external mouse is attached.  If there is no other
+      mouse attached, the touchpad will automatically be enabled (unless explicitly disabled by the touchpad-enabled key)</_description>
+    </key>
     <key name="horiz-scroll-enabled" type="b">
       <default>false</default>
       <_summary>Enable horizontal scrolling</_summary>

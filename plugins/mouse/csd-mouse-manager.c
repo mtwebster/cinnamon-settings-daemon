@@ -64,6 +64,7 @@
 
 /* Touchpad settings */
 #define KEY_TOUCHPAD_DISABLE_W_TYPING    "disable-while-typing"
+#define KEY_TOUCHPAD_DISABLE_W_EXT_DEV   "disable-when-external-device-attached"
 #define KEY_PAD_HORIZ_SCROLL             "horiz-scroll-enabled"
 #define KEY_SCROLL_METHOD                "scroll-method"
 #define KEY_TAP_TO_CLICK                 "tap-to-click"
@@ -964,7 +965,8 @@ set_mouse_settings (CsdMouseManager *manager,
         set_edge_scroll (device, g_settings_get_enum (manager->priv->touchpad_settings, KEY_SCROLL_METHOD));
         set_horiz_scroll (device, g_settings_get_boolean (manager->priv->touchpad_settings, KEY_PAD_HORIZ_SCROLL));
         set_natural_scroll (manager, device, g_settings_get_boolean (manager->priv->touchpad_settings, KEY_NATURAL_SCROLL_ENABLED));
-        if (g_settings_get_boolean (manager->priv->touchpad_settings, KEY_TOUCHPAD_ENABLED) == FALSE)
+        if (g_settings_get_boolean (manager->priv->touchpad_settings, KEY_TOUCHPAD_ENABLED) == FALSE ||
+            (g_settings_get_boolean (manager->priv->touchpad_settings, KEY_TOUCHPAD_DISABLE_W_EXT_DEV) == TRUE && mouse_is_present()))
                 set_touchpad_disabled (device);
 }
 
@@ -1098,7 +1100,8 @@ touchpad_callback (GSettings       *settings,
                 } else if (g_str_equal (key, KEY_PAD_HORIZ_SCROLL)) {
                         set_horiz_scroll (device, g_settings_get_boolean (settings, key));
                 } else if (g_str_equal (key, KEY_TOUCHPAD_ENABLED)) {
-                        if (g_settings_get_boolean (settings, key) == FALSE)
+                        if (g_settings_get_boolean (settings, key) == FALSE ||
+                            (g_settings_get_boolean (manager->priv->touchpad_settings, KEY_TOUCHPAD_DISABLE_W_EXT_DEV) == TRUE && mouse_is_present()))
                                 set_touchpad_disabled (device);
                         else
                                 set_touchpad_enabled (gdk_x11_device_get_id (device));
@@ -1116,7 +1119,8 @@ touchpad_callback (GSettings       *settings,
         g_list_free (devices);
 
         if (g_str_equal (key, KEY_TOUCHPAD_ENABLED) &&
-            g_settings_get_boolean (settings, key)) {
+            (g_settings_get_boolean (settings, key) &&
+             (g_settings_get_boolean (manager->priv->touchpad_settings, KEY_TOUCHPAD_DISABLE_W_EXT_DEV) && !mouse_is_present()))) {
                 devices = get_disabled_devices (manager->priv->device_manager);
                 for (l = devices; l != NULL; l = l->next) {
                         int device_id;
