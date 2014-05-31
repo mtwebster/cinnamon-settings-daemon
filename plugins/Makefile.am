@@ -9,7 +9,6 @@ enabled_plugins =	\
 	cursor		\
 	dummy		\
     datetime    \
-	power		\
 	housekeeping    \
 	keyboard	\
 	media-keys	\
@@ -21,6 +20,18 @@ enabled_plugins =	\
 	$(NULL)
 
 disabled_plugins = $(NULL)
+
+if UPOWER_09
+enabled_plugins += power-upower0.9
+else
+disabled_plugins += power-upower0.9
+endif
+
+if UPOWER_10
+enabled_plugins += power-upower1.0
+else
+disabled_plugins += power-upower1.0
+endif
 
 if BUILD_WACOM
 enabled_plugins += wacom

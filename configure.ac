@@ -537,7 +537,8 @@ plugins/common/Makefile
 plugins/cursor/Makefile
 plugins/datetime/Makefile
 plugins/dummy/Makefile
-plugins/power/Makefile
+plugins/power-upower0.9/Makefile
+plugins/power-upower1.0/Makefile
 plugins/housekeeping/Makefile
 plugins/keyboard/Makefile
 plugins/media-keys/Makefile
