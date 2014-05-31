@@ -243,6 +243,11 @@ PKG_CHECK_MODULES(SOUND, [libpulse >= $PA_REQUIRED_VERSION $GUDEV_PKG libpulse-m
 # ---------------------------------------------------------------------------
 PKG_CHECK_MODULES(POWER, upower-glib >= $UPOWER_REQUIRED_VERSION cinnamon-desktop >= $CINNAMON_DESKTOP_REQUIRED_VERSION libcanberra-gtk3 libnotify x11 xext)
 
+PKG_CHECK_MODULES([UPOWER_CHK], [ upower-glib < 0.99.0 ],
+   [AC_DEFINE([UPOWER_09], [1], [Use upower0.9 power plugin])],
+   [AC_DEFINE([UPOWER_10], [1], [Use upower1.0 power plugin])]
+])
+
 if test x$have_gudev != xno; then
 	PKG_CHECK_MODULES(BACKLIGHT_HELPER,
 		glib-2.0 >= $GLIB_REQUIRED_VERSION
