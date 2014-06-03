@@ -1,5 +1,5 @@
 #include <glib-object.h>
-#include <gsd-power-enums.h>
+#include <csd-power-enums.h>
 
 static void
 output_enum_values (GType class_type)
@@ -30,9 +30,9 @@ output_flags_values (GType class_type)
 int
 main (int argc, char **argv)
 {
-	g_type_class_ref (GSD_POWER_TYPE_INHIBITOR_FLAG);
-	g_type_class_ref (GSD_POWER_TYPE_PRESENCE_STATUS);
-	output_flags_values (GSD_POWER_TYPE_INHIBITOR_FLAG);
-	output_enum_values (GSD_POWER_TYPE_PRESENCE_STATUS);
+	g_type_class_ref (CSD_POWER_TYPE_INHIBITOR_FLAG);
+	g_type_class_ref (CSD_POWER_TYPE_PRESENCE_STATUS);
+	output_flags_values (CSD_POWER_TYPE_INHIBITOR_FLAG);
+	output_enum_values (CSD_POWER_TYPE_PRESENCE_STATUS);
 	return 0;
 }

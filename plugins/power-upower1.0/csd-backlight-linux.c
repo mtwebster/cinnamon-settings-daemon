@@ -23,7 +23,7 @@
 
 #include "config.h"
 
-#include "gsd-backlight-linux.h"
+#include "csd-backlight-linux.h"
 
 #include <stdlib.h>
 
@@ -31,7 +31,7 @@
 #include <gudev/gudev.h>
 
 static gchar *
-gsd_backlight_helper_get_type (GList *devices, const gchar *type)
+csd_backlight_helper_get_type (GList *devices, const gchar *type)
 {
 	const gchar *type_tmp;
 	GList *d;
@@ -46,7 +46,7 @@ gsd_backlight_helper_get_type (GList *devices, const gchar *type)
 #endif /* HAVE_GUDEV */
 
 char *
-gsd_backlight_helper_get_best_backlight (void)
+csd_backlight_helper_get_best_backlight (void)
 {
 #ifdef HAVE_GUDEV
 	gchar *path = NULL;
@@ -60,13 +60,13 @@ gsd_backlight_helper_get_best_backlight (void)
 
 	/* search the backlight devices and prefer the types:
 	 * firmware -> platform -> raw */
-	path = gsd_backlight_helper_get_type (devices, "firmware");
+	path = csd_backlight_helper_get_type (devices, "firmware");
 	if (path != NULL)
 		goto out;
-	path = gsd_backlight_helper_get_type (devices, "platform");
+	path = csd_backlight_helper_get_type (devices, "platform");
 	if (path != NULL)
 		goto out;
-	path = gsd_backlight_helper_get_type (devices, "raw");
+	path = csd_backlight_helper_get_type (devices, "raw");
 	if (path != NULL)
 		goto out;
 out:

@@ -34,8 +34,8 @@
 #define POWER_UP_TIME_ON_AC                             15 /* seconds */
 
 /* Default brightness values for the mock backlight used in the test suite */
-#define GSD_MOCK_DEFAULT_BRIGHTNESS                     50
-#define GSD_MOCK_MAX_BRIGHTNESS                        100
+#define CSD_MOCK_DEFAULT_BRIGHTNESS                     50
+#define CSD_MOCK_MAX_BRIGHTNESS                        100
 
 /* When unplugging the external monitor, give a certain amount
  * of time before suspending the laptop */

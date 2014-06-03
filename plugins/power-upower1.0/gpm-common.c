@@ -33,20 +33,20 @@
 #include <canberra-gtk.h>
 
 #define GNOME_DESKTOP_USE_UNSTABLE_API
-#include <libgnome-desktop/gnome-rr.h>
+#include <libcinnamon-desktop/gnome-rr.h>
 
 #include "gpm-common.h"
-#include "gsd-power-constants.h"
-#include "gsd-power-manager.h"
-#include "gsd-backlight-linux.h"
+#include "csd-power-constants.h"
+#include "csd-power-manager.h"
+#include "csd-backlight-linux.h"
 
 #define XSCREENSAVER_WATCHDOG_TIMEOUT           120 /* seconds */
 #define UPS_SOUND_LOOP_ID                        99
-#define GSD_POWER_MANAGER_CRITICAL_ALERT_TIMEOUT  5 /* seconds */
+#define CSD_POWER_MANAGER_CRITICAL_ALERT_TIMEOUT  5 /* seconds */
 
 /* take a discrete value with offset and convert to percentage */
 int
-gsd_power_backlight_abs_to_percentage (int min, int max, int value)
+csd_power_backlight_abs_to_percentage (int min, int max, int value)
 {
         g_return_val_if_fail (max > min, -1);
         g_return_val_if_fail (value >= min, -1);
@@ -138,7 +138,7 @@ out:
 }
 
 gboolean
-gsd_power_is_hardware_a_vm (void)
+csd_power_is_hardware_a_vm (void)
 {
         const gchar *str;
         gboolean ret = FALSE;
@@ -263,7 +263,7 @@ disable_builtin_screensaver (gpointer unused)
 }
 
 guint
-gsd_power_enable_screensaver_watchdog (void)
+csd_power_enable_screensaver_watchdog (void)
 {
         int dummy;
 
@@ -302,7 +302,7 @@ out:
         return output;
 }
 
-#ifdef GSD_MOCK
+#ifdef CSD_MOCK
 static void
 backlight_set_mock_value (gint value)
 {
@@ -312,7 +312,7 @@ backlight_set_mock_value (gint value)
 
 	g_debug ("Setting mock brightness: %d", value);
 
-	filename = "GSD_MOCK_brightness";
+	filename = "CSD_MOCK_brightness";
 	contents = g_strdup_printf ("%d", value);
 	if (!g_file_set_contents (filename, contents, -1, NULL))
 		g_warning ("Setting mock brightness failed: %s", error->message);
@@ -327,37 +327,37 @@ backlight_get_mock_value (const char *argument)
 	gint64 ret;
 
 	if (g_str_equal (argument, "get-max-brightness")) {
-		g_debug ("Returning max mock brightness: %d", GSD_MOCK_MAX_BRIGHTNESS);
-		return GSD_MOCK_MAX_BRIGHTNESS;
+		g_debug ("Returning max mock brightness: %d", CSD_MOCK_MAX_BRIGHTNESS);
+		return CSD_MOCK_MAX_BRIGHTNESS;
 	}
 
 	g_assert (g_str_equal (argument, "get-brightness"));
 
-	if (g_file_get_contents ("GSD_MOCK_brightness", &contents, NULL, NULL)) {
+	if (g_file_get_contents ("CSD_MOCK_brightness", &contents, NULL, NULL)) {
 		ret = g_ascii_strtoll (contents, NULL, 0);
 		g_free (contents);
 		g_debug ("Returning mock brightness: %"G_GINT64_FORMAT, ret);
 	} else {
-		ret = GSD_MOCK_DEFAULT_BRIGHTNESS;
-		backlight_set_mock_value (GSD_MOCK_DEFAULT_BRIGHTNESS);
+		ret = CSD_MOCK_DEFAULT_BRIGHTNESS;
+		backlight_set_mock_value (CSD_MOCK_DEFAULT_BRIGHTNESS);
 		g_debug ("Returning default mock brightness: %"G_GINT64_FORMAT, ret);
 	}
 
 	return ret;
 }
-#endif /* GSD_MOCK */
+#endif /* CSD_MOCK */
 
 gboolean
 backlight_available (GnomeRRScreen *rr_screen)
 {
         char *path;
 
-#ifdef GSD_MOCK
+#ifdef CSD_MOCK
 	return TRUE;
 #endif
         if (get_primary_output (rr_screen) != NULL)
                 return TRUE;
-        path = gsd_backlight_helper_get_best_backlight ();
+        path = csd_backlight_helper_get_best_backlight ();
         if (path == NULL)
                 return FALSE;
 
@@ -383,21 +383,21 @@ backlight_helper_get_value (const gchar *argument, GError **error)
         gchar *command = NULL;
         gchar *endptr = NULL;
 
-#ifdef GSD_MOCK
+#ifdef CSD_MOCK
         return backlight_get_mock_value (argument);
 #endif
 
 #ifndef __linux__
         /* non-Linux platforms won't have /sys/class/backlight */
         g_set_error_literal (error,
-                             GSD_POWER_MANAGER_ERROR,
-                             GSD_POWER_MANAGER_ERROR_FAILED,
+                             CSD_POWER_MANAGER_ERROR,
+                             CSD_POWER_MANAGER_ERROR_FAILED,
                              "The sysfs backlight helper is only for Linux");
         goto out;
 #endif
 
         /* get the data */
-        command = g_strdup_printf (LIBEXECDIR "/gsd-backlight-helper --%s",
+        command = g_strdup_printf (LIBEXECDIR "/csd-backlight-helper --%s",
                                    argument);
         ret = g_spawn_command_line_sync (command,
                                          &stdout_data,
@@ -411,9 +411,9 @@ backlight_helper_get_value (const gchar *argument, GError **error)
 
         if (WEXITSTATUS (exit_status) != 0) {
                  g_set_error (error,
-                             GSD_POWER_MANAGER_ERROR,
-                             GSD_POWER_MANAGER_ERROR_FAILED,
-                             "gsd-backlight-helper failed: %s",
+                             CSD_POWER_MANAGER_ERROR,
+                             CSD_POWER_MANAGER_ERROR_FAILED,
+                             "csd-backlight-helper failed: %s",
                              stdout_data ? stdout_data : "No reason");
                 goto out;
         }
@@ -425,8 +425,8 @@ backlight_helper_get_value (const gchar *argument, GError **error)
         if (endptr == stdout_data) {
                 value = -1;
                 g_set_error (error,
-                             GSD_POWER_MANAGER_ERROR,
-                             GSD_POWER_MANAGER_ERROR_FAILED,
+                             CSD_POWER_MANAGER_ERROR,
+                             CSD_POWER_MANAGER_ERROR_FAILED,
                              "failed to parse value: %s",
                              stdout_data);
                 goto out;
@@ -436,8 +436,8 @@ backlight_helper_get_value (const gchar *argument, GError **error)
         if (value > G_MAXINT) {
                 value = -1;
                 g_set_error (error,
-                             GSD_POWER_MANAGER_ERROR,
-                             GSD_POWER_MANAGER_ERROR_FAILED,
+                             CSD_POWER_MANAGER_ERROR,
+                             CSD_POWER_MANAGER_ERROR_FAILED,
                              "value out of range: %s",
                              stdout_data);
                 goto out;
@@ -446,8 +446,8 @@ backlight_helper_get_value (const gchar *argument, GError **error)
         /* Fetching the value failed, for some other reason */
         if (value < 0) {
                 g_set_error (error,
-                             GSD_POWER_MANAGER_ERROR,
-                             GSD_POWER_MANAGER_ERROR_FAILED,
+                             CSD_POWER_MANAGER_ERROR,
+                             CSD_POWER_MANAGER_ERROR_FAILED,
                              "value negative, but helper did not fail: %s",
                              stdout_data);
                 goto out;
@@ -475,7 +475,7 @@ backlight_helper_set_value (const gchar *argument,
         gint exit_status = 0;
         gchar *command = NULL;
 
-#ifdef GSD_MOCK
+#ifdef CSD_MOCK
 	backlight_set_mock_value (value);
 	return TRUE;
 #endif
@@ -483,14 +483,14 @@ backlight_helper_set_value (const gchar *argument,
 #ifndef __linux__
         /* non-Linux platforms won't have /sys/class/backlight */
         g_set_error_literal (error,
-                             GSD_POWER_MANAGER_ERROR,
-                             GSD_POWER_MANAGER_ERROR_FAILED,
+                             CSD_POWER_MANAGER_ERROR,
+                             CSD_POWER_MANAGER_ERROR_FAILED,
                              "The sysfs backlight helper is only for Linux");
         goto out;
 #endif
 
         /* get the data */
-        command = g_strdup_printf ("pkexec " LIBEXECDIR "/gsd-backlight-helper --%s %i",
+        command = g_strdup_printf ("pkexec " LIBEXECDIR "/csd-backlight-helper --%s %i",
                                    argument, value);
         ret = g_spawn_command_line_sync (command,
                                          NULL,
@@ -628,8 +628,8 @@ backlight_step_up (GnomeRRScreen *rr_screen, GError **error)
                 crtc = gnome_rr_output_get_crtc (output);
                 if (crtc == NULL) {
                         g_set_error (error,
-                                     GSD_POWER_MANAGER_ERROR,
-                                     GSD_POWER_MANAGER_ERROR_FAILED,
+                                     CSD_POWER_MANAGER_ERROR,
+                                     CSD_POWER_MANAGER_ERROR_FAILED,
                                      "no crtc for %s",
                                      gnome_rr_output_get_name (output));
                         return percentage_value;
@@ -687,8 +687,8 @@ backlight_step_down (GnomeRRScreen *rr_screen, GError **error)
                 crtc = gnome_rr_output_get_crtc (output);
                 if (crtc == NULL) {
                         g_set_error (error,
-                                     GSD_POWER_MANAGER_ERROR,
-                                     GSD_POWER_MANAGER_ERROR_FAILED,
+                                     CSD_POWER_MANAGER_ERROR,
+                                     CSD_POWER_MANAGER_ERROR_FAILED,
                                      "no crtc for %s",
                                      gnome_rr_output_get_name (output));
                         return percentage_value;
@@ -776,7 +776,7 @@ randr_output_is_on (GnomeRROutput *output)
         return gnome_rr_crtc_get_current_mode (crtc) != NULL;
 }
 
-#ifdef GSD_MOCK
+#ifdef CSD_MOCK
 static void
 mock_monitor_changed (GFileMonitor     *monitor,
 		      GFile            *file,
@@ -796,22 +796,22 @@ screen_destroyed (gpointer  user_data,
 {
 	g_object_unref (G_OBJECT (user_data));
 }
-#endif /* GSD_MOCK */
+#endif /* CSD_MOCK */
 
 void
 watch_external_monitor (GnomeRRScreen *screen)
 {
-#ifdef GSD_MOCK
+#ifdef CSD_MOCK
 	GFile *file;
 	GFileMonitor *monitor;
 
-	file = g_file_new_for_commandline_arg ("GSD_MOCK_EXTERNAL_MONITOR");
+	file = g_file_new_for_commandline_arg ("CSD_MOCK_EXTERNAL_MONITOR");
 	monitor = g_file_monitor (file, G_FILE_MONITOR_NONE, NULL, NULL);
 	g_object_unref (file);
 	g_signal_connect (monitor, "changed",
 			  G_CALLBACK (mock_monitor_changed), screen);
 	g_object_weak_ref (G_OBJECT (screen), screen_destroyed, monitor);
-#endif /* GSD_MOCK */
+#endif /* CSD_MOCK */
 }
 
 gboolean
@@ -820,10 +820,10 @@ external_monitor_is_connected (GnomeRRScreen *screen)
         GnomeRROutput **outputs;
         guint i;
 
-#ifdef GSD_MOCK
+#ifdef CSD_MOCK
 	char *mock_external_monitor_contents;
 
-	if (g_file_get_contents ("GSD_MOCK_EXTERNAL_MONITOR", &mock_external_monitor_contents, NULL, NULL)) {
+	if (g_file_get_contents ("CSD_MOCK_EXTERNAL_MONITOR", &mock_external_monitor_contents, NULL, NULL)) {
 		if (mock_external_monitor_contents[0] == '1') {
 			g_free (mock_external_monitor_contents);
 			g_debug ("Mock external monitor is on");
@@ -834,10 +834,10 @@ external_monitor_is_connected (GnomeRRScreen *screen)
 			return FALSE;
 		}
 
-		g_error ("Unhandled value for GSD_MOCK_EXTERNAL_MONITOR contents: %s", mock_external_monitor_contents);
+		g_error ("Unhandled value for CSD_MOCK_EXTERNAL_MONITOR contents: %s", mock_external_monitor_contents);
 		g_free (mock_external_monitor_contents);
 	}
-#endif /* GSD_MOCK */
+#endif /* CSD_MOCK */
 
 	g_assert (screen != NULL);
 
@@ -873,7 +873,7 @@ play_loop_start (guint *id)
         if (*id != 0)
                 return;
 
-        *id = g_timeout_add_seconds (GSD_POWER_MANAGER_CRITICAL_ALERT_TIMEOUT,
+        *id = g_timeout_add_seconds (CSD_POWER_MANAGER_CRITICAL_ALERT_TIMEOUT,
                                      (GSourceFunc) play_loop_timeout_cb,
                                      NULL);
         play_sound ();

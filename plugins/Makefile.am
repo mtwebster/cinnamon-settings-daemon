@@ -21,15 +21,11 @@ enabled_plugins =	\
 
 disabled_plugins = $(NULL)
 
-if UPOWER_09
-enabled_plugins += power-upower0.9
-else
-disabled_plugins += power-upower0.9
-endif
-
-if UPOWER_10
+if UPOWER10
 enabled_plugins += power-upower1.0
+disabled_plugins += power-upower0.9
 else
+enabled_plugins += power-upower0.9
 disabled_plugins += power-upower1.0
 endif
 

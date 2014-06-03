@@ -18,24 +18,24 @@ builddir = os.environ.get('BUILDDIR', os.path.dirname(__file__))
 
 sys.path.insert(0, os.path.join(project_root, 'tests'))
 sys.path.insert(0, builddir)
-import gsdtestcase
-import gsdpowerconstants
-import gsdpowerenums
+import csdtestcase
+import csdpowerconstants
+import csdpowerenums
 
 import dbus
 
 from gi.repository import Gio
 from gi.repository import GLib
 
-class PowerPluginTest(gsdtestcase.GSDTestCase):
+class PowerPluginTest(csdtestcase.CSDTestCase):
     '''Test the power plugin'''
 
     def setUp(self):
         self.check_logind_gnome_session()
         self.start_logind()
         self.daemon_death_expected = False
-        self.session_log_write = open(os.path.join(self.workdir, 'gnome-session.log'), 'wb')
-        self.session = subprocess.Popen(['gnome-session', '-f',
+        self.session_log_write = open(os.path.join(self.workdir, 'cinnamon-session.log'), 'wb')
+        self.session = subprocess.Popen(['cinnamon-session', '-f',
                                          '-a', os.path.join(self.workdir, 'autostart'),
                                          '--session=dummy', '--debug'],
                                         stdout=self.session_log_write,
@@ -59,45 +59,45 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         # start mock upowerd
         (self.upowerd, self.obj_upower) = self.spawn_server_template(
             'upower', {'OnBattery': True, 'LidIsClosed': False}, stdout=subprocess.PIPE)
-        gsdtestcase.set_nonblock(self.upowerd.stdout)
+        csdtestcase.set_nonblock(self.upowerd.stdout)
 
         # start mock gnome-shell screensaver
         (self.screensaver, self.obj_screensaver) = self.spawn_server_template(
-            'gnome_screensaver', stdout=subprocess.PIPE)
-        gsdtestcase.set_nonblock(self.screensaver.stdout)
+            'cinnamon_screensaver', stdout=subprocess.PIPE)
+        csdtestcase.set_nonblock(self.screensaver.stdout)
 
         self.start_mutter()
 
-        # Set up the gnome-session presence
+        # Set up the cinnamon-session presence
         obj_session_presence = self.session_bus_con.get_object(
             'org.gnome.SessionManager', '/org/gnome/SessionManager/Presence')
         self.obj_session_presence_props = dbus.Interface(obj_session_presence, dbus.PROPERTIES_IFACE)
 
         # ensure that our tests don't lock the screen when the screensaver
         # gets active
-        self.settings_screensaver = Gio.Settings('org.gnome.desktop.screensaver')
+        self.settings_screensaver = Gio.Settings('org.cinnamon.desktop.screensaver')
         self.settings_screensaver['lock-enabled'] = False
 
         # Ensure we set up the external monitor state
         self.set_has_external_monitor(False)
 
-        self.settings_gsd_power = Gio.Settings('org.gnome.settings-daemon.plugins.power')
+        self.settings_csd_power = Gio.Settings('org.cinnamon.settings-daemon.plugins.power')
 
         # start power plugin
-        self.settings_gsd_power['active'] = False
+        self.settings_csd_power['active'] = False
         # As hibernate is not available, suspend by default on critical
-        self.settings_gsd_power['critical-battery-action'] = 'suspend'
+        self.settings_csd_power['critical-battery-action'] = 'suspend'
         Gio.Settings.sync()
         self.plugin_log_write = open(os.path.join(self.workdir, 'plugin_power.log'), 'wb')
         # avoid painfully long delays of actions for tests
         env = os.environ.copy()
         # Disable the use of the PolicyKit helper for brightness
-        env['GSD_DISABLE_BACKLIGHT_HELPER'] = '1'
+        env['CSD_DISABLE_BACKLIGHT_HELPER'] = '1'
         # Disable PulseAudio output from libcanberra
         env['CANBERRA_DRIVER'] = 'null'
 
         self.daemon = subprocess.Popen(
-            [os.path.join(builddir, 'gsd-test-power')],
+            [os.path.join(builddir, 'csd-test-power')],
             # comment out this line if you want to see the logs in real time
             stdout=self.plugin_log_write,
             stderr=subprocess.STDOUT,
@@ -144,18 +144,18 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
 
         # reset all changed gsettings, so that tests are independent from each
         # other
-        for schema in [self.settings_gsd_power, self.settings_session, self.settings_screensaver]:
+        for schema in [self.settings_csd_power, self.settings_session, self.settings_screensaver]:
             for k in schema.list_keys():
                 schema.reset(k)
         Gio.Settings.sync()
 
         try:
-            os.unlink('GSD_MOCK_EXTERNAL_MONITOR')
+            os.unlink('CSD_MOCK_EXTERNAL_MONITOR')
         except OSError:
             pass
 
         try:
-            os.unlink('GSD_MOCK_brightness')
+            os.unlink('CSD_MOCK_brightness')
         except OSError:
             pass
 
@@ -174,23 +174,23 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         self.session_log.close()
 
     def check_logind_gnome_session(self):
-        '''Check that gnome-session is built with logind support'''
+        '''Check that cinnamon-session is built with logind support'''
 
-        path = GLib.find_program_in_path ('gnome-session')
+        path = GLib.find_program_in_path ('cinnamon-session')
         assert(path)
         ldd = subprocess.Popen(['ldd', path], stdout=subprocess.PIPE)
         out = ldd.communicate()[0]
         if not 'libsystemd-login.so.0' in out:
-            self.fail('gnome-session is not built with logind support')
+            self.fail('cinnamon-session is not built with logind support')
 
     def get_status(self):
         return self.obj_session_presence_props.Get('org.gnome.SessionManager.Presence', 'status')
 
     def get_brightness(self):
         try:
-            (success, ret) = GLib.file_get_contents ('GSD_MOCK_brightness')
+            (success, ret) = GLib.file_get_contents ('CSD_MOCK_brightness')
         except:
-            return gsdpowerconstants.GSD_MOCK_DEFAULT_BRIGHTNESS
+            return csdpowerconstants.CSD_MOCK_DEFAULT_BRIGHTNESS
         return int(ret)
 
     def set_has_external_monitor(self, external):
@@ -198,7 +198,7 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
             val = '1'
         else:
             val = '0'
-        GLib.file_set_contents ('GSD_MOCK_EXTERNAL_MONITOR', val)
+        GLib.file_set_contents ('CSD_MOCK_EXTERNAL_MONITOR', val)
 
     def check_for_logout(self, timeout):
         '''Check that logout is requested.
@@ -218,7 +218,7 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
             if log and (b'GsmManager: requesting logout' in log):
                 break
         else:
-            self.fail('timed out waiting for gnome-session logout call')
+            self.fail('timed out waiting for cinnamon-session logout call')
 
     def check_no_logout(self, seconds):
         '''Check that no logout is requested in the given time'''
@@ -386,7 +386,7 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         self.check_unblank(2)
 
         # Check for no blank before the normal blank timeout
-        self.check_no_blank(gsdpowerconstants.SCREENSAVER_TIMEOUT_BLANK - 4)
+        self.check_no_blank(csdpowerconstants.SCREENSAVER_TIMEOUT_BLANK - 4)
         self.assertTrue(self.obj_screensaver.GetActive(), 'screensaver not turned on')
 
         # and check for blank after the blank timeout
@@ -399,7 +399,7 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         self.check_unblank(2)
 
         # check no blank and then blank
-        self.check_no_blank(gsdpowerconstants.SCREENSAVER_TIMEOUT_BLANK - 4)
+        self.check_no_blank(csdpowerconstants.SCREENSAVER_TIMEOUT_BLANK - 4)
         self.assertTrue(self.obj_screensaver.GetActive(), 'screensaver not turned on')
         self.check_blank(10)
 
@@ -409,7 +409,7 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         # create suspend inhibitor which should have no effect on the idle
         inhibit_id = self.obj_session_mgr.Inhibit(
             'testsuite', dbus.UInt32(0), 'for testing',
-            dbus.UInt32(gsdpowerenums.GSM_INHIBITOR_FLAG_SUSPEND))
+            dbus.UInt32(csdpowerenums.GSM_INHIBITOR_FLAG_SUSPEND))
 
         self.obj_screensaver.SetActive(True)
         self.assertTrue(self.obj_screensaver.GetActive(), 'screensaver not turned on')
@@ -421,10 +421,10 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         # the locked screen saver
         self.reset_idle_timer()
         self.check_unblank(2)
-        self.assertTrue(self.get_brightness() == gsdpowerconstants.GSD_MOCK_DEFAULT_BRIGHTNESS , 'incorrect unblanked brightness (%d != %d)' % (self.get_brightness(), gsdpowerconstants.GSD_MOCK_DEFAULT_BRIGHTNESS))
+        self.assertTrue(self.get_brightness() == csdpowerconstants.CSD_MOCK_DEFAULT_BRIGHTNESS , 'incorrect unblanked brightness (%d != %d)' % (self.get_brightness(), csdpowerconstants.CSD_MOCK_DEFAULT_BRIGHTNESS))
 
         # Check for no blank before the normal blank timeout
-        self.check_no_blank(gsdpowerconstants.SCREENSAVER_TIMEOUT_BLANK - 4)
+        self.check_no_blank(csdpowerconstants.SCREENSAVER_TIMEOUT_BLANK - 4)
         self.assertTrue(self.obj_screensaver.GetActive(), 'screensaver not turned on')
 
         # and check for blank after the blank timeout
@@ -438,26 +438,26 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
 
         # Verify that idle is set after 5 seconds
         self.settings_session['idle-delay'] = 5
-        self.assertEqual(self.get_status(), gsdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
+        self.assertEqual(self.get_status(), csdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
         time.sleep(7)
-        self.assertEqual(self.get_status(), gsdpowerenums.GSM_PRESENCE_STATUS_IDLE)
+        self.assertEqual(self.get_status(), csdpowerenums.GSM_PRESENCE_STATUS_IDLE)
 
         # Raise the idle delay, and see that we stop being idle
         # and get idle again after the timeout
         self.settings_session['idle-delay'] = 10
         self.reset_idle_timer()
         time.sleep(5)
-        self.assertEqual(self.get_status(), gsdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
+        self.assertEqual(self.get_status(), csdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
         time.sleep(10)
-        self.assertEqual(self.get_status(), gsdpowerenums.GSM_PRESENCE_STATUS_IDLE)
+        self.assertEqual(self.get_status(), csdpowerenums.GSM_PRESENCE_STATUS_IDLE)
 
         # Lower the delay again, and see that we get idle as we should
         self.settings_session['idle-delay'] = 5
         self.reset_idle_timer()
         time.sleep(2)
-        self.assertEqual(self.get_status(), gsdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
+        self.assertEqual(self.get_status(), csdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
         time.sleep(5)
-        self.assertEqual(self.get_status(), gsdpowerenums.GSM_PRESENCE_STATUS_IDLE)
+        self.assertEqual(self.get_status(), csdpowerenums.GSM_PRESENCE_STATUS_IDLE)
 
     def test_idle_time_reset_on_resume(self):
         '''Check that the IDLETIME is reset when resuming'''
@@ -466,9 +466,9 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
 
         # Go idle
         self.settings_session['idle-delay'] = 5
-        self.assertEqual(self.get_status(), gsdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
+        self.assertEqual(self.get_status(), csdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
         time.sleep(7)
-        self.assertEqual(self.get_status(), gsdpowerenums.GSM_PRESENCE_STATUS_IDLE)
+        self.assertEqual(self.get_status(), csdpowerenums.GSM_PRESENCE_STATUS_IDLE)
 
         # Go to sleep
         self.obj_logind.EmitSignal('', 'PrepareForSleep', 'b', [True], dbus_interface='org.freedesktop.DBus.Mock')
@@ -479,14 +479,14 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         time.sleep(1)
 
         # And check we're not idle
-        self.assertEqual(self.get_status(), gsdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
+        self.assertEqual(self.get_status(), csdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
 
     def test_sleep_inactive_battery(self):
         '''sleep-inactive-battery-timeout'''
 
         self.settings_session['idle-delay'] = 2
-        self.settings_gsd_power['sleep-inactive-battery-timeout'] = 5
-        self.settings_gsd_power['sleep-inactive-battery-type'] = 'suspend'
+        self.settings_csd_power['sleep-inactive-battery-timeout'] = 5
+        self.settings_csd_power['sleep-inactive-battery-type'] = 'suspend'
 
         # wait for idle delay; should not yet suspend
         self.check_no_suspend(2)
@@ -499,9 +499,9 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         '''suspend-no-hibernate'''
 
         self.settings_session['idle-delay'] = 2
-        self.settings_gsd_power['sleep-inactive-battery-timeout'] = 5
+        self.settings_csd_power['sleep-inactive-battery-timeout'] = 5
         # Hibernate isn't possible, so it should end up suspending
-        self.settings_gsd_power['critical-battery-action'] = 'hibernate'
+        self.settings_csd_power['critical-battery-action'] = 'hibernate'
 
         # wait for idle delay; should not yet hibernate
         self.check_no_suspend(2)
@@ -513,21 +513,21 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
     def test_sleep_inhibition(self):
         '''Does not sleep under idle inhibition'''
 
-        idle_delay = round(gsdpowerconstants.MINIMUM_IDLE_DIM_DELAY / gsdpowerconstants.IDLE_DELAY_TO_IDLE_DIM_MULTIPLIER)
+        idle_delay = round(csdpowerconstants.MINIMUM_IDLE_DIM_DELAY / csdpowerconstants.IDLE_DELAY_TO_IDLE_DIM_MULTIPLIER)
 
         self.settings_session['idle-delay'] = idle_delay
-        self.settings_gsd_power['sleep-inactive-battery-timeout'] = 5
-        self.settings_gsd_power['sleep-inactive-battery-type'] = 'suspend'
+        self.settings_csd_power['sleep-inactive-battery-timeout'] = 5
+        self.settings_csd_power['sleep-inactive-battery-type'] = 'suspend'
 
         # create inhibitor
         inhibit_id = self.obj_session_mgr.Inhibit(
             'testsuite', dbus.UInt32(0), 'for testing',
-            dbus.UInt32(gsdpowerenums.GSM_INHIBITOR_FLAG_IDLE | gsdpowerenums.GSM_INHIBITOR_FLAG_SUSPEND))
+            dbus.UInt32(csdpowerenums.GSM_INHIBITOR_FLAG_IDLE | csdpowerenums.GSM_INHIBITOR_FLAG_SUSPEND))
         self.check_no_suspend(idle_delay + 2)
         self.check_no_dim(0)
 
         # Check that we didn't go to idle either
-        self.assertEqual(self.get_status(), gsdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
+        self.assertEqual(self.get_status(), csdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
 
         self.obj_session_mgr.Uninhibit(dbus.UInt32(inhibit_id))
 
@@ -539,7 +539,7 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         # create inhibitor
         inhibit_id = self.obj_session_mgr.Inhibit(
             'testsuite', dbus.UInt32(0), 'for testing',
-            dbus.UInt32(gsdpowerenums.GSM_INHIBITOR_FLAG_SUSPEND))
+            dbus.UInt32(csdpowerenums.GSM_INHIBITOR_FLAG_SUSPEND))
 
         # Close the lid
         self.obj_upower.Set('org.freedesktop.UPower', 'LidIsClosed', True)
@@ -561,7 +561,7 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         # create inhibitor
         inhibit_id = self.obj_session_mgr.Inhibit(
             'testsuite', dbus.UInt32(0), 'for testing',
-            dbus.UInt32(gsdpowerenums.GSM_INHIBITOR_FLAG_SUSPEND))
+            dbus.UInt32(csdpowerenums.GSM_INHIBITOR_FLAG_SUSPEND))
 
         # Close the lid
         self.obj_upower.Set('org.freedesktop.UPower', 'LidIsClosed', True)
@@ -580,7 +580,7 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         # create inhibitor
         inhibit_id = self.obj_session_mgr.Inhibit(
             'testsuite', dbus.UInt32(0), 'for testing',
-            dbus.UInt32(gsdpowerenums.GSM_INHIBITOR_FLAG_SUSPEND))
+            dbus.UInt32(csdpowerenums.GSM_INHIBITOR_FLAG_SUSPEND))
 
         # Close the lid
         self.obj_upower.Set('org.freedesktop.UPower', 'LidIsClosed', True)
@@ -602,25 +602,25 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
     def test_dim(self):
         '''Check that we do go to dim'''
 
-        idle_delay = round(gsdpowerconstants.MINIMUM_IDLE_DIM_DELAY / gsdpowerconstants.IDLE_DELAY_TO_IDLE_DIM_MULTIPLIER)
+        idle_delay = round(csdpowerconstants.MINIMUM_IDLE_DIM_DELAY / csdpowerconstants.IDLE_DELAY_TO_IDLE_DIM_MULTIPLIER)
 
         self.settings_session['idle-delay'] = idle_delay
-        self.settings_gsd_power['sleep-inactive-battery-timeout'] = idle_delay + 1
-        self.settings_gsd_power['sleep-inactive-battery-type'] = 'suspend'
+        self.settings_csd_power['sleep-inactive-battery-timeout'] = idle_delay + 1
+        self.settings_csd_power['sleep-inactive-battery-type'] = 'suspend'
         # This is an absolute percentage, and our brightness is 0..100
-        dim_level = self.settings_gsd_power['idle-brightness'];
+        dim_level = self.settings_csd_power['idle-brightness'];
 
         # Check that we're not idle
-        self.assertEqual(self.get_status(), gsdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
+        self.assertEqual(self.get_status(), csdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
 
         # Wait and check we're not idle, but dimmed
-        self.check_dim(gsdpowerconstants.MINIMUM_IDLE_DIM_DELAY)
+        self.check_dim(csdpowerconstants.MINIMUM_IDLE_DIM_DELAY)
         # Give time for the brightness to change
         time.sleep(2)
         level = self.get_brightness();
         self.assertTrue(level == dim_level, 'incorrect dim brightness (%d != %d)' % (level, dim_level))
 
-        self.assertEqual(self.get_status(), gsdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
+        self.assertEqual(self.get_status(), csdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
 
         # Bring down the screensaver
         self.obj_screensaver.SetActive(True)
@@ -638,7 +638,7 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         time.sleep(1)
 
         # And check that we have the pre-dim brightness
-        self.assertTrue(self.get_brightness() == gsdpowerconstants.GSD_MOCK_DEFAULT_BRIGHTNESS , 'incorrect unblanked brightness (%d != %d)' % (self.get_brightness(), gsdpowerconstants.GSD_MOCK_DEFAULT_BRIGHTNESS))
+        self.assertTrue(self.get_brightness() == csdpowerconstants.CSD_MOCK_DEFAULT_BRIGHTNESS , 'incorrect unblanked brightness (%d != %d)' % (self.get_brightness(), csdpowerconstants.CSD_MOCK_DEFAULT_BRIGHTNESS))
 
     def test_no_suspend_lid_close(self):
         '''Check that we don't suspend on lid close with an external monitor'''
@@ -658,7 +658,7 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         # Unplug the external monitor
         self.set_has_external_monitor(False)
         # Wait for the safety timer + 3 seconds
-        time.sleep (gsdpowerconstants.LID_CLOSE_SAFETY_TIMEOUT + 3)
+        time.sleep (csdpowerconstants.LID_CLOSE_SAFETY_TIMEOUT + 3)
         # Check that we're uninhibited
         self.check_for_uninhibited()
 
@@ -815,11 +815,11 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         '''Test forced logout'''
 
         self.daemon_death_expected = True
-        idle_delay = round(gsdpowerconstants.MINIMUM_IDLE_DIM_DELAY / gsdpowerconstants.IDLE_DELAY_TO_IDLE_DIM_MULTIPLIER)
+        idle_delay = round(csdpowerconstants.MINIMUM_IDLE_DIM_DELAY / csdpowerconstants.IDLE_DELAY_TO_IDLE_DIM_MULTIPLIER)
 
         self.settings_session['idle-delay'] = idle_delay
-        self.settings_gsd_power['sleep-inactive-battery-timeout'] = idle_delay + 1
-        self.settings_gsd_power['sleep-inactive-battery-type'] = 'logout'
+        self.settings_csd_power['sleep-inactive-battery-timeout'] = idle_delay + 1
+        self.settings_csd_power['sleep-inactive-battery-type'] = 'logout'
 
         self.check_for_logout(idle_delay + 2)
 
@@ -830,16 +830,16 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
     def test_forced_logout_inhibition(self):
         '''Test we don't force logout when inhibited'''
 
-        idle_delay = round(gsdpowerconstants.MINIMUM_IDLE_DIM_DELAY / gsdpowerconstants.IDLE_DELAY_TO_IDLE_DIM_MULTIPLIER)
+        idle_delay = round(csdpowerconstants.MINIMUM_IDLE_DIM_DELAY / csdpowerconstants.IDLE_DELAY_TO_IDLE_DIM_MULTIPLIER)
 
         self.settings_session['idle-delay'] = idle_delay
-        self.settings_gsd_power['sleep-inactive-battery-timeout'] = idle_delay + 1
-        self.settings_gsd_power['sleep-inactive-battery-type'] = 'logout'
+        self.settings_csd_power['sleep-inactive-battery-timeout'] = idle_delay + 1
+        self.settings_csd_power['sleep-inactive-battery-type'] = 'logout'
 
         # create suspend inhibitor which should stop us logging out
         inhibit_id = self.obj_session_mgr.Inhibit(
             'testsuite', dbus.UInt32(0), 'for testing',
-            dbus.UInt32(gsdpowerenums.GSM_INHIBITOR_FLAG_LOGOUT))
+            dbus.UInt32(csdpowerenums.GSM_INHIBITOR_FLAG_LOGOUT))
 
         self.check_no_logout(idle_delay + 3)
 
@@ -847,7 +847,7 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         self.obj_session_mgr.Uninhibit(dbus.UInt32(inhibit_id))
 
     def disabled_test_unindle_on_ac_plug(self):
-        idle_delay = round(gsdpowerconstants.MINIMUM_IDLE_DIM_DELAY / gsdpowerconstants.IDLE_DELAY_TO_IDLE_DIM_MULTIPLIER)
+        idle_delay = round(csdpowerconstants.MINIMUM_IDLE_DIM_DELAY / csdpowerconstants.IDLE_DELAY_TO_IDLE_DIM_MULTIPLIER)
         self.settings_session['idle-delay'] = idle_delay
 
         # Wait for idle
@@ -858,7 +858,7 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         self.obj_upower.EmitSignal('', 'Changed', '', [], dbus_interface='org.freedesktop.DBus.Mock')
 
         # Check that we undim
-        self.check_undim(gsdpowerconstants.POWER_UP_TIME_ON_AC / 2)
+        self.check_undim(csdpowerconstants.POWER_UP_TIME_ON_AC / 2)
 
         # And wait a little more to see us dim again
         self.check_dim(idle_delay + 2)
@@ -868,7 +868,7 @@ class PowerPluginTest(gsdtestcase.GSDTestCase):
         self.obj_upower.EmitSignal('', 'Changed', '', [], dbus_interface='org.freedesktop.DBus.Mock')
 
         # Check that we undim
-        self.check_undim(gsdpowerconstants.POWER_UP_TIME_ON_AC / 2)
+        self.check_undim(csdpowerconstants.POWER_UP_TIME_ON_AC / 2)
 
         # And wait a little more to see us dim again
         self.check_dim(idle_delay + 2)

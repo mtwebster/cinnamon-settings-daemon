@@ -22,7 +22,7 @@
 #include <glib/gi18n-lib.h>
 #include <gmodule.h>
 
-#include "gnome-settings-plugin.h"
-#include "gsd-power-manager.h"
+#include "cinnamon-settings-plugin.h"
+#include "csd-power-manager.h"
 
-GNOME_SETTINGS_PLUGIN_REGISTER (GsdPower, gsd_power)
+GNOME_SETTINGS_PLUGIN_REGISTER (CsdPower, csd_power)

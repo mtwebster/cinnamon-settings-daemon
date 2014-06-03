@@ -33,21 +33,21 @@
 #include <gio/gunixfdlist.h>
 
 #define GNOME_DESKTOP_USE_UNSTABLE_API
-#include <libgnome-desktop/gnome-rr.h>
-#include <libgnome-desktop/gnome-idle-monitor.h>
+#include <libcinnamon-desktop/gnome-rr.h>
+#include <libcinnamon-desktop/gnome-idle-monitor.h>
 
-#include <gsd-input-helper.h>
+#include <csd-input-helper.h>
 
-#include "gsd-power-constants.h"
+#include "csd-power-constants.h"
 #include "gsm-inhibitor-flag.h"
 #include "gsm-presence-flag.h"
 #include "gsm-manager-logout-mode.h"
 #include "gpm-common.h"
-#include "gnome-settings-plugin.h"
-#include "gnome-settings-profile.h"
-#include "gnome-settings-bus.h"
-#include "gsd-enums.h"
-#include "gsd-power-manager.h"
+#include "cinnamon-settings-plugin.h"
+#include "cinnamon-settings-profile.h"
+#include "cinnamon-settings-bus.h"
+#include "csd-enums.h"
+#include "csd-power-manager.h"
 
 #define GNOME_SESSION_DBUS_NAME                 "org.gnome.SessionManager"
 #define GNOME_SESSION_DBUS_PATH_PRESENCE        "/org/gnome/SessionManager/Presence"
@@ -59,30 +59,30 @@
 #define UPOWER_DBUS_INTERFACE                   "org.freedesktop.UPower"
 #define UPOWER_DBUS_INTERFACE_KBDBACKLIGHT      "org.freedesktop.UPower.KbdBacklight"
 
-#define GSD_POWER_SETTINGS_SCHEMA               "org.gnome.settings-daemon.plugins.power"
-#define GSD_XRANDR_SETTINGS_SCHEMA              "org.gnome.settings-daemon.plugins.xrandr"
+#define CSD_POWER_SETTINGS_SCHEMA               "org.cinnamon.settings-daemon.plugins.power"
+#define CSD_XRANDR_SETTINGS_SCHEMA              "org.cinnamon.settings-daemon.plugins.xrandr"
 
-#define GSD_POWER_DBUS_NAME                     GSD_DBUS_NAME ".Power"
-#define GSD_POWER_DBUS_PATH                     GSD_DBUS_PATH "/Power"
-#define GSD_POWER_DBUS_INTERFACE                GSD_DBUS_BASE_INTERFACE ".Power"
-#define GSD_POWER_DBUS_INTERFACE_SCREEN         GSD_POWER_DBUS_INTERFACE ".Screen"
-#define GSD_POWER_DBUS_INTERFACE_KEYBOARD       GSD_POWER_DBUS_INTERFACE ".Keyboard"
+#define CSD_POWER_DBUS_NAME                     CSD_DBUS_NAME ".Power"
+#define CSD_POWER_DBUS_PATH                     CSD_DBUS_PATH "/Power"
+#define CSD_POWER_DBUS_INTERFACE                CSD_DBUS_BASE_INTERFACE ".Power"
+#define CSD_POWER_DBUS_INTERFACE_SCREEN         CSD_POWER_DBUS_INTERFACE ".Screen"
+#define CSD_POWER_DBUS_INTERFACE_KEYBOARD       CSD_POWER_DBUS_INTERFACE ".Keyboard"
 
-#define GSD_POWER_MANAGER_NOTIFY_TIMEOUT_SHORT          10 * 1000 /* ms */
-#define GSD_POWER_MANAGER_NOTIFY_TIMEOUT_LONG           30 * 1000 /* ms */
+#define CSD_POWER_MANAGER_NOTIFY_TIMEOUT_SHORT          10 * 1000 /* ms */
+#define CSD_POWER_MANAGER_NOTIFY_TIMEOUT_LONG           30 * 1000 /* ms */
 
 #define SYSTEMD_DBUS_NAME                       "org.freedesktop.login1"
 #define SYSTEMD_DBUS_PATH                       "/org/freedesktop/login1"
 #define SYSTEMD_DBUS_INTERFACE                  "org.freedesktop.login1.Manager"
 
 /* Time between notifying the user about a critical action and the action itself in UPower. */
-#define GSD_ACTION_DELAY 20
+#define CSD_ACTION_DELAY 20
 /* And the time before we stop the warning sound */
-#define GSD_STOP_SOUND_DELAY GSD_ACTION_DELAY - 2
+#define CSD_STOP_SOUND_DELAY CSD_ACTION_DELAY - 2
 
 static const gchar introspection_xml[] =
 "<node>"
-"  <interface name='org.gnome.SettingsDaemon.Power.Screen'>"
+"  <interface name='org.cinnamon.SettingsDaemon.Power.Screen'>"
 "    <property name='Brightness' type='i' access='readwrite'/>"
 "    <method name='StepUp'>"
 "      <arg type='i' name='new_percentage' direction='out'/>"
@@ -91,7 +91,7 @@ static const gchar introspection_xml[] =
 "      <arg type='i' name='new_percentage' direction='out'/>"
 "    </method>"
 "  </interface>"
-"  <interface name='org.gnome.SettingsDaemon.Power.Keyboard'>"
+"  <interface name='org.cinnamon.SettingsDaemon.Power.Keyboard'>"
 "    <property name='Brightness' type='i' access='readwrite'/>"
 "    <method name='StepUp'>"
 "      <arg type='i' name='new_percentage' direction='out'/>"
@@ -105,19 +105,19 @@ static const gchar introspection_xml[] =
 "  </interface>"
 "</node>";
 
-#define GSD_POWER_MANAGER_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE ((o), GSD_TYPE_POWER_MANAGER, GsdPowerManagerPrivate))
+#define CSD_POWER_MANAGER_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE ((o), CSD_TYPE_POWER_MANAGER, CsdPowerManagerPrivate))
 
 typedef enum {
-        GSD_POWER_IDLE_MODE_NORMAL,
-        GSD_POWER_IDLE_MODE_DIM,
-        GSD_POWER_IDLE_MODE_BLANK,
-        GSD_POWER_IDLE_MODE_SLEEP
-} GsdPowerIdleMode;
+        CSD_POWER_IDLE_MODE_NORMAL,
+        CSD_POWER_IDLE_MODE_DIM,
+        CSD_POWER_IDLE_MODE_BLANK,
+        CSD_POWER_IDLE_MODE_SLEEP
+} CsdPowerIdleMode;
 
-struct GsdPowerManagerPrivate
+struct CsdPowerManagerPrivate
 {
         /* D-Bus */
-        GsdSessionManager       *session;
+        CsdSessionManager       *session;
         guint                    name_id;
         GDBusNodeInfo           *introspection_data;
         GDBusConnection         *connection;
@@ -131,7 +131,7 @@ struct GsdPowerManagerPrivate
         GSettings               *settings_xrandr;
 
         /* Screensaver */
-        GsdScreenSaver          *screensaver_proxy;
+        CsdScreenSaver          *screensaver_proxy;
         gboolean                 screensaver_active;
 
         /* State */
@@ -144,7 +144,7 @@ struct GsdPowerManagerPrivate
         NotifyNotification      *notification_ups_discharging;
         NotifyNotification      *notification_low;
         NotifyNotification      *notification_sleep_warning;
-        GsdPowerActionType       sleep_action_type;
+        CsdPowerActionType       sleep_action_type;
         gboolean                 battery_is_low; /* laptop battery low, or UPS discharging */
 
         /* Brightness */
@@ -176,10 +176,10 @@ struct GsdPowerManagerPrivate
         guint                    idle_blank_id;
         guint                    idle_sleep_warning_id;
         guint                    idle_sleep_id;
-        GsdPowerIdleMode         current_idle_mode;
+        CsdPowerIdleMode         current_idle_mode;
 
         guint                    temporary_unidle_on_ac_id;
-        GsdPowerIdleMode         previous_idle_mode;
+        CsdPowerIdleMode         previous_idle_mode;
 
         guint                    xscreensaver_watchdog_timer_id;
 };
@@ -188,28 +188,28 @@ enum {
         PROP_0,
 };
 
-static void     gsd_power_manager_class_init  (GsdPowerManagerClass *klass);
-static void     gsd_power_manager_init        (GsdPowerManager      *power_manager);
+static void     csd_power_manager_class_init  (CsdPowerManagerClass *klass);
+static void     csd_power_manager_init        (CsdPowerManager      *power_manager);
 
-static void      engine_device_warning_changed_cb (UpDevice *device, GParamSpec *pspec, GsdPowerManager *manager);
-static void      do_power_action_type (GsdPowerManager *manager, GsdPowerActionType action_type);
-static void      uninhibit_lid_switch (GsdPowerManager *manager);
-static void      stop_inhibit_lid_switch_timer (GsdPowerManager *manager);
-static void      main_battery_or_ups_low_changed (GsdPowerManager *manager, gboolean is_low);
-static gboolean  idle_is_session_inhibited (GsdPowerManager *manager, guint mask, gboolean *is_inhibited);
+static void      engine_device_warning_changed_cb (UpDevice *device, GParamSpec *pspec, CsdPowerManager *manager);
+static void      do_power_action_type (CsdPowerManager *manager, CsdPowerActionType action_type);
+static void      uninhibit_lid_switch (CsdPowerManager *manager);
+static void      stop_inhibit_lid_switch_timer (CsdPowerManager *manager);
+static void      main_battery_or_ups_low_changed (CsdPowerManager *manager, gboolean is_low);
+static gboolean  idle_is_session_inhibited (CsdPowerManager *manager, guint mask, gboolean *is_inhibited);
 static void      idle_triggered_idle_cb (GnomeIdleMonitor *monitor, guint watch_id, gpointer user_data);
 static void      idle_became_active_cb (GnomeIdleMonitor *monitor, guint watch_id, gpointer user_data);
 
-G_DEFINE_TYPE (GsdPowerManager, gsd_power_manager, G_TYPE_OBJECT)
+G_DEFINE_TYPE (CsdPowerManager, csd_power_manager, G_TYPE_OBJECT)
 
 static gpointer manager_object = NULL;
 
 GQuark
-gsd_power_manager_error_quark (void)
+csd_power_manager_error_quark (void)
 {
         static GQuark quark = 0;
         if (!quark)
-                quark = g_quark_from_static_string ("gsd_power_manager_error");
+                quark = g_quark_from_static_string ("csd_power_manager_error");
         return quark;
 }
 
@@ -223,7 +223,7 @@ notify_close_if_showing (NotifyNotification **notification)
 }
 
 static void
-engine_device_add (GsdPowerManager *manager, UpDevice *device)
+engine_device_add (CsdPowerManager *manager, UpDevice *device)
 {
         UpDeviceKind kind;
 
@@ -243,7 +243,7 @@ engine_device_add (GsdPowerManager *manager, UpDevice *device)
 }
 
 static gboolean
-engine_coldplug (GsdPowerManager *manager)
+engine_coldplug (CsdPowerManager *manager)
 {
         guint i;
         GPtrArray *array = NULL;
@@ -264,13 +264,13 @@ engine_coldplug (GsdPowerManager *manager)
 }
 
 static void
-engine_device_added_cb (UpClient *client, UpDevice *device, GsdPowerManager *manager)
+engine_device_added_cb (UpClient *client, UpDevice *device, CsdPowerManager *manager)
 {
         engine_device_add (manager, device);
 }
 
 static void
-engine_device_removed_cb (UpClient *client, const char *object_path, GsdPowerManager *manager)
+engine_device_removed_cb (UpClient *client, const char *object_path, CsdPowerManager *manager)
 {
         guint i;
 
@@ -307,7 +307,7 @@ create_notification (const char *summary,
 }
 
 static void
-engine_ups_discharging (GsdPowerManager *manager, UpDevice *device)
+engine_ups_discharging (CsdPowerManager *manager, UpDevice *device)
 {
         const gchar *title;
         gchar *remaining_text = NULL;
@@ -348,7 +348,7 @@ engine_ups_discharging (GsdPowerManager *manager, UpDevice *device)
                              icon_name,
                              &manager->priv->notification_ups_discharging);
         notify_notification_set_timeout (manager->priv->notification_ups_discharging,
-                                         GSD_POWER_MANAGER_NOTIFY_TIMEOUT_LONG);
+                                         CSD_POWER_MANAGER_NOTIFY_TIMEOUT_LONG);
         notify_notification_set_urgency (manager->priv->notification_ups_discharging,
                                          NOTIFY_URGENCY_NORMAL);
         /* TRANSLATORS: this is the notification application name */
@@ -363,24 +363,24 @@ engine_ups_discharging (GsdPowerManager *manager, UpDevice *device)
         g_free (remaining_text);
 }
 
-static GsdPowerActionType
-manager_critical_action_get (GsdPowerManager *manager)
+static CsdPowerActionType
+manager_critical_action_get (CsdPowerManager *manager)
 {
-        GsdPowerActionType policy;
+        CsdPowerActionType policy;
         char *action;
 
         action = up_client_get_critical_action (manager->priv->up_client);
         /* We don't make the difference between HybridSleep and Hibernate */
         if (g_strcmp0 (action, "PowerOff") == 0)
-                policy = GSD_POWER_ACTION_SHUTDOWN;
+                policy = CSD_POWER_ACTION_SHUTDOWN;
         else
-                policy = GSD_POWER_ACTION_HIBERNATE;
+                policy = CSD_POWER_ACTION_HIBERNATE;
         g_free (action);
         return policy;
 }
 
 static gboolean
-manager_critical_action_stop_sound_cb (GsdPowerManager *manager)
+manager_critical_action_stop_sound_cb (CsdPowerManager *manager)
 {
         /* stop playing the alert as it's too late to do anything now */
         play_loop_stop (&manager->priv->critical_alert_timeout_id);
@@ -389,7 +389,7 @@ manager_critical_action_stop_sound_cb (GsdPowerManager *manager)
 }
 
 static void
-engine_charge_low (GsdPowerManager *manager, UpDevice *device)
+engine_charge_low (CsdPowerManager *manager, UpDevice *device)
 {
         const gchar *title = NULL;
         gboolean ret;
@@ -497,7 +497,7 @@ engine_charge_low (GsdPowerManager *manager, UpDevice *device)
                              icon_name,
                              &manager->priv->notification_low);
         notify_notification_set_timeout (manager->priv->notification_low,
-                                         GSD_POWER_MANAGER_NOTIFY_TIMEOUT_LONG);
+                                         CSD_POWER_MANAGER_NOTIFY_TIMEOUT_LONG);
         notify_notification_set_urgency (manager->priv->notification_low,
                                          NOTIFY_URGENCY_NORMAL);
         notify_notification_set_app_name (manager->priv->notification_low, _("Power"));
@@ -517,7 +517,7 @@ engine_charge_low (GsdPowerManager *manager, UpDevice *device)
 }
 
 static void
-engine_charge_critical (GsdPowerManager *manager, UpDevice *device)
+engine_charge_critical (CsdPowerManager *manager, UpDevice *device)
 {
         const gchar *title = NULL;
         gboolean ret;
@@ -525,7 +525,7 @@ engine_charge_critical (GsdPowerManager *manager, UpDevice *device)
         gdouble percentage;
         char *icon_name;
         gint64 time_to_empty;
-        GsdPowerActionType policy;
+        CsdPowerActionType policy;
         UpDeviceKind kind;
 
         /* get device properties */
@@ -552,11 +552,11 @@ engine_charge_critical (GsdPowerManager *manager, UpDevice *device)
                 policy = manager_critical_action_get (manager);
 
                 /* use different text for different actions */
-                if (policy == GSD_POWER_ACTION_HIBERNATE) {
+                if (policy == CSD_POWER_ACTION_HIBERNATE) {
                         /* TRANSLATORS: give the user a ultimatum */
                         message = g_strdup_printf (_("Computer will hibernate very soon unless it is plugged in."));
 
-                } else if (policy == GSD_POWER_ACTION_SHUTDOWN) {
+                } else if (policy == CSD_POWER_ACTION_SHUTDOWN) {
                         /* TRANSLATORS: give the user a ultimatum */
                         message = g_strdup_printf (_("Computer will shutdown very soon unless it is plugged in."));
                 }
@@ -677,12 +677,12 @@ engine_charge_critical (GsdPowerManager *manager, UpDevice *device)
 }
 
 static void
-engine_charge_action (GsdPowerManager *manager, UpDevice *device)
+engine_charge_action (CsdPowerManager *manager, UpDevice *device)
 {
         const gchar *title = NULL;
         gchar *message = NULL;
         char *icon_name;
-        GsdPowerActionType policy;
+        CsdPowerActionType policy;
         guint timer_id;
         UpDeviceKind kind;
 
@@ -701,22 +701,22 @@ engine_charge_action (GsdPowerManager *manager, UpDevice *device)
                 policy = manager_critical_action_get (manager);
 
                 /* use different text for different actions */
-                if (policy == GSD_POWER_ACTION_HIBERNATE) {
+                if (policy == CSD_POWER_ACTION_HIBERNATE) {
                         /* TRANSLATORS: computer will hibernate */
                         message = g_strdup (_("The battery is below the critical level and "
                                               "this computer is about to hibernate."));
 
-                } else if (policy == GSD_POWER_ACTION_SHUTDOWN) {
+                } else if (policy == CSD_POWER_ACTION_SHUTDOWN) {
                         /* TRANSLATORS: computer will just shutdown */
                         message = g_strdup (_("The battery is below the critical level and "
                                               "this computer is about to shutdown."));
                 }
 
                 /* wait 20 seconds for user-panic */
-                timer_id = g_timeout_add_seconds (GSD_STOP_SOUND_DELAY,
+                timer_id = g_timeout_add_seconds (CSD_STOP_SOUND_DELAY,
                                                   (GSourceFunc) manager_critical_action_stop_sound_cb,
                                                   manager);
-                g_source_set_name_by_id (timer_id, "[GsdPowerManager] battery critical-action");
+                g_source_set_name_by_id (timer_id, "[CsdPowerManager] battery critical-action");
 
         } else if (kind == UP_DEVICE_KIND_UPS) {
                 /* TRANSLATORS: UPS is really, really, low */
@@ -726,22 +726,22 @@ engine_charge_action (GsdPowerManager *manager, UpDevice *device)
                 policy = manager_critical_action_get (manager);
 
                 /* use different text for different actions */
-                if (policy == GSD_POWER_ACTION_HIBERNATE) {
+                if (policy == CSD_POWER_ACTION_HIBERNATE) {
                         /* TRANSLATORS: computer will hibernate */
                         message = g_strdup (_("UPS is below the critical level and "
                                               "this computer is about to hibernate."));
 
-                } else if (policy == GSD_POWER_ACTION_SHUTDOWN) {
+                } else if (policy == CSD_POWER_ACTION_SHUTDOWN) {
                         /* TRANSLATORS: computer will just shutdown */
                         message = g_strdup (_("UPS is below the critical level and "
                                               "this computer is about to shutdown."));
                 }
 
                 /* wait 20 seconds for user-panic */
-                timer_id = g_timeout_add_seconds (GSD_STOP_SOUND_DELAY,
+                timer_id = g_timeout_add_seconds (CSD_STOP_SOUND_DELAY,
                                                   (GSourceFunc) manager_critical_action_stop_sound_cb,
                                                   manager);
-                g_source_set_name_by_id (timer_id, "[GsdPowerManager] ups critical-action");
+                g_source_set_name_by_id (timer_id, "[CsdPowerManager] ups critical-action");
         }
 
         /* not all types have actions */
@@ -775,7 +775,7 @@ engine_charge_action (GsdPowerManager *manager, UpDevice *device)
 }
 
 static void
-engine_device_warning_changed_cb (UpDevice *device, GParamSpec *pspec, GsdPowerManager *manager)
+engine_device_warning_changed_cb (UpDevice *device, GParamSpec *pspec, CsdPowerManager *manager)
 {
         UpDeviceLevel warning;
 
@@ -817,7 +817,7 @@ gnome_session_shutdown_cb (GObject *source_object,
                                            res,
                                            &error);
         if (result == NULL) {
-                g_warning ("couldn't shutdown using gnome-session: %s",
+                g_warning ("couldn't shutdown using cinnamon-session: %s",
                            error->message);
                 g_error_free (error);
         } else {
@@ -826,7 +826,7 @@ gnome_session_shutdown_cb (GObject *source_object,
 }
 
 static void
-gnome_session_shutdown (GsdPowerManager *manager)
+gnome_session_shutdown (CsdPowerManager *manager)
 {
         g_dbus_proxy_call (G_DBUS_PROXY (manager->priv->session),
                            "Shutdown",
@@ -848,7 +848,7 @@ gnome_session_logout_cb (GObject *source_object,
                                            res,
                                            &error);
         if (result == NULL) {
-                g_warning ("couldn't log out using gnome-session: %s",
+                g_warning ("couldn't log out using cinnamon-session: %s",
                            error->message);
                 g_error_free (error);
         } else {
@@ -857,7 +857,7 @@ gnome_session_logout_cb (GObject *source_object,
 }
 
 static void
-gnome_session_logout (GsdPowerManager *manager,
+gnome_session_logout (CsdPowerManager *manager,
                       guint            logout_mode)
 {
         g_dbus_proxy_call (G_DBUS_PROXY (manager->priv->session),
@@ -869,7 +869,7 @@ gnome_session_logout (GsdPowerManager *manager,
 }
 
 static void
-action_poweroff (GsdPowerManager *manager)
+action_poweroff (CsdPowerManager *manager)
 {
         if (manager->priv->logind_proxy == NULL) {
                 g_warning ("no systemd support");
@@ -886,7 +886,7 @@ action_poweroff (GsdPowerManager *manager)
 }
 
 static void
-action_suspend (GsdPowerManager *manager)
+action_suspend (CsdPowerManager *manager)
 {
         if (manager->priv->logind_proxy == NULL) {
                 g_warning ("no systemd support");
@@ -903,7 +903,7 @@ action_suspend (GsdPowerManager *manager)
 }
 
 static void
-action_hibernate (GsdPowerManager *manager)
+action_hibernate (CsdPowerManager *manager)
 {
         if (manager->priv->logind_proxy == NULL) {
                 g_warning ("no systemd support");
@@ -920,7 +920,7 @@ action_hibernate (GsdPowerManager *manager)
 }
 
 static void
-backlight_enable (GsdPowerManager *manager)
+backlight_enable (CsdPowerManager *manager)
 {
         gboolean ret;
         GError *error = NULL;
@@ -938,7 +938,7 @@ backlight_enable (GsdPowerManager *manager)
 }
 
 static void
-backlight_disable (GsdPowerManager *manager)
+backlight_disable (CsdPowerManager *manager)
 {
         gboolean ret;
         GError *error = NULL;
@@ -955,57 +955,57 @@ backlight_disable (GsdPowerManager *manager)
 }
 
 static void
-do_power_action_type (GsdPowerManager *manager,
-                      GsdPowerActionType action_type)
+do_power_action_type (CsdPowerManager *manager,
+                      CsdPowerActionType action_type)
 {
         switch (action_type) {
-        case GSD_POWER_ACTION_SUSPEND:
+        case CSD_POWER_ACTION_SUSPEND:
                 action_suspend (manager);
                 break;
-        case GSD_POWER_ACTION_INTERACTIVE:
+        case CSD_POWER_ACTION_INTERACTIVE:
                 gnome_session_shutdown (manager);
                 break;
-        case GSD_POWER_ACTION_HIBERNATE:
+        case CSD_POWER_ACTION_HIBERNATE:
                 action_hibernate (manager);
                 break;
-        case GSD_POWER_ACTION_SHUTDOWN:
+        case CSD_POWER_ACTION_SHUTDOWN:
                 /* this is only used on critically low battery where
                  * hibernate is not available and is marginally better
                  * than just powering down the computer mid-write */
                 action_poweroff (manager);
                 break;
-        case GSD_POWER_ACTION_BLANK:
+        case CSD_POWER_ACTION_BLANK:
                 backlight_disable (manager);
                 break;
-        case GSD_POWER_ACTION_NOTHING:
+        case CSD_POWER_ACTION_NOTHING:
                 break;
-        case GSD_POWER_ACTION_LOGOUT:
+        case CSD_POWER_ACTION_LOGOUT:
                 gnome_session_logout (manager, GSM_MANAGER_LOGOUT_MODE_FORCE);
                 break;
         }
 }
 
 static GsmInhibitorFlag
-get_idle_inhibitors_for_action (GsdPowerActionType action_type)
+get_idle_inhibitors_for_action (CsdPowerActionType action_type)
 {
         switch (action_type) {
-        case GSD_POWER_ACTION_BLANK:
-        case GSD_POWER_ACTION_SHUTDOWN:
-        case GSD_POWER_ACTION_INTERACTIVE:
+        case CSD_POWER_ACTION_BLANK:
+        case CSD_POWER_ACTION_SHUTDOWN:
+        case CSD_POWER_ACTION_INTERACTIVE:
                 return GSM_INHIBITOR_FLAG_IDLE;
-        case GSD_POWER_ACTION_HIBERNATE:
-        case GSD_POWER_ACTION_SUSPEND:
+        case CSD_POWER_ACTION_HIBERNATE:
+        case CSD_POWER_ACTION_SUSPEND:
                 return GSM_INHIBITOR_FLAG_SUSPEND; /* in addition to idle */
-        case GSD_POWER_ACTION_NOTHING:
+        case CSD_POWER_ACTION_NOTHING:
                 return 0;
-        case GSD_POWER_ACTION_LOGOUT:
+        case CSD_POWER_ACTION_LOGOUT:
                 return GSM_INHIBITOR_FLAG_LOGOUT; /* in addition to idle */
         }
         return 0;
 }
 
 static gboolean
-is_action_inhibited (GsdPowerManager *manager, GsdPowerActionType action_type)
+is_action_inhibited (CsdPowerManager *manager, CsdPowerActionType action_type)
 {
         GsmInhibitorFlag flag;
         gboolean is_inhibited;
@@ -1020,7 +1020,7 @@ is_action_inhibited (GsdPowerManager *manager, GsdPowerActionType action_type)
 }
 
 static gboolean
-upower_kbd_set_brightness (GsdPowerManager *manager, guint value, GError **error)
+upower_kbd_set_brightness (CsdPowerManager *manager, guint value, GError **error)
 {
         GVariant *retval;
 
@@ -1046,7 +1046,7 @@ upower_kbd_set_brightness (GsdPowerManager *manager, guint value, GError **error
 }
 
 static int
-upower_kbd_toggle (GsdPowerManager *manager,
+upower_kbd_toggle (CsdPowerManager *manager,
                    GError **error)
 {
         gboolean ret;
@@ -1081,19 +1081,19 @@ upower_kbd_toggle (GsdPowerManager *manager,
 }
 
 static gboolean
-suspend_on_lid_close (GsdPowerManager *manager)
+suspend_on_lid_close (CsdPowerManager *manager)
 {
-        GsdXrandrBootBehaviour val;
+        CsdXrandrBootBehaviour val;
 
         if (!external_monitor_is_connected (manager->priv->rr_screen))
                 return TRUE;
 
         val = g_settings_get_enum (manager->priv->settings_xrandr, "default-monitors-setup");
-        return val == GSD_XRANDR_BOOT_BEHAVIOUR_DO_NOTHING;
+        return val == CSD_XRANDR_BOOT_BEHAVIOUR_DO_NOTHING;
 }
 
 static gboolean
-inhibit_lid_switch_timer_cb (GsdPowerManager *manager)
+inhibit_lid_switch_timer_cb (CsdPowerManager *manager)
 {
         stop_inhibit_lid_switch_timer (manager);
 
@@ -1111,7 +1111,7 @@ inhibit_lid_switch_timer_cb (GsdPowerManager *manager)
  * again in the timeout handler to see if we can suspend then.
  */
 static void
-setup_inhibit_lid_switch_timer (GsdPowerManager *manager)
+setup_inhibit_lid_switch_timer (CsdPowerManager *manager)
 {
         if (manager->priv->inhibit_lid_switch_timer_id != 0) {
                 g_debug ("lid close safety timer already set up");
@@ -1123,11 +1123,11 @@ setup_inhibit_lid_switch_timer (GsdPowerManager *manager)
         manager->priv->inhibit_lid_switch_timer_id = g_timeout_add_seconds (LID_CLOSE_SAFETY_TIMEOUT,
                                                                             (GSourceFunc) inhibit_lid_switch_timer_cb,
                                                                             manager);
-        g_source_set_name_by_id (manager->priv->inhibit_lid_switch_timer_id, "[GsdPowerManager] lid close safety timer");
+        g_source_set_name_by_id (manager->priv->inhibit_lid_switch_timer_id, "[CsdPowerManager] lid close safety timer");
 }
 
 static void
-stop_inhibit_lid_switch_timer (GsdPowerManager *manager) {
+stop_inhibit_lid_switch_timer (CsdPowerManager *manager) {
         if (manager->priv->inhibit_lid_switch_timer_id != 0) {
                 g_debug ("stopping lid close safety timer");
                 g_source_remove (manager->priv->inhibit_lid_switch_timer_id);
@@ -1136,7 +1136,7 @@ stop_inhibit_lid_switch_timer (GsdPowerManager *manager) {
 }
 
 static void
-restart_inhibit_lid_switch_timer (GsdPowerManager *manager)
+restart_inhibit_lid_switch_timer (CsdPowerManager *manager)
 {
         stop_inhibit_lid_switch_timer (manager);
         g_debug ("restarting lid close safety timer");
@@ -1144,7 +1144,7 @@ restart_inhibit_lid_switch_timer (GsdPowerManager *manager)
 }
 
 static void
-do_lid_open_action (GsdPowerManager *manager)
+do_lid_open_action (CsdPowerManager *manager)
 {
         /* play a sound, using sounds from the naming spec */
         ca_context_play (ca_gtk_context_get (), 0,
@@ -1159,7 +1159,7 @@ do_lid_open_action (GsdPowerManager *manager)
 }
 
 static void
-lock_screensaver (GsdPowerManager *manager)
+lock_screensaver (CsdPowerManager *manager)
 {
         gboolean do_lock;
 
@@ -1182,7 +1182,7 @@ lock_screensaver (GsdPowerManager *manager)
 }
 
 static void
-do_lid_closed_action (GsdPowerManager *manager)
+do_lid_closed_action (CsdPowerManager *manager)
 {
         /* play a sound, using sounds from the naming spec */
         ca_context_play (ca_gtk_context_get (), 0,
@@ -1210,7 +1210,7 @@ do_lid_closed_action (GsdPowerManager *manager)
 }
 
 static void
-lid_state_changed_cb (UpClient *client, GParamSpec *pspec, GsdPowerManager *manager)
+lid_state_changed_cb (UpClient *client, GParamSpec *pspec, CsdPowerManager *manager)
 {
         gboolean tmp;
 
@@ -1231,21 +1231,21 @@ lid_state_changed_cb (UpClient *client, GParamSpec *pspec, GsdPowerManager *mana
 }
 
 static const gchar *
-idle_mode_to_string (GsdPowerIdleMode mode)
+idle_mode_to_string (CsdPowerIdleMode mode)
 {
-        if (mode == GSD_POWER_IDLE_MODE_NORMAL)
+        if (mode == CSD_POWER_IDLE_MODE_NORMAL)
                 return "normal";
-        if (mode == GSD_POWER_IDLE_MODE_DIM)
+        if (mode == CSD_POWER_IDLE_MODE_DIM)
                 return "dim";
-        if (mode == GSD_POWER_IDLE_MODE_BLANK)
+        if (mode == CSD_POWER_IDLE_MODE_BLANK)
                 return "blank";
-        if (mode == GSD_POWER_IDLE_MODE_SLEEP)
+        if (mode == CSD_POWER_IDLE_MODE_SLEEP)
                 return "sleep";
         return "unknown";
 }
 
 static const char *
-idle_watch_id_to_string (GsdPowerManager *manager, guint id)
+idle_watch_id_to_string (CsdPowerManager *manager, guint id)
 {
         if (id == manager->priv->idle_dim_id)
                 return "dim";
@@ -1259,7 +1259,7 @@ idle_watch_id_to_string (GsdPowerManager *manager, guint id)
 }
 
 static void
-backlight_iface_emit_changed (GsdPowerManager *manager,
+backlight_iface_emit_changed (CsdPowerManager *manager,
                               const char      *interface_name,
                               gint32           value)
 {
@@ -1273,14 +1273,14 @@ backlight_iface_emit_changed (GsdPowerManager *manager,
                                        value);
         g_dbus_connection_emit_signal (manager->priv->connection,
                                        NULL,
-                                       GSD_POWER_DBUS_PATH,
+                                       CSD_POWER_DBUS_PATH,
                                        "org.freedesktop.DBus.Properties",
                                        "PropertiesChanged",
                                        params, NULL);
 }
 
 static gboolean
-display_backlight_dim (GsdPowerManager *manager,
+display_backlight_dim (CsdPowerManager *manager,
                        gint idle_percentage,
                        GError **error)
 {
@@ -1328,7 +1328,7 @@ out:
 }
 
 static gboolean
-kbd_backlight_dim (GsdPowerManager *manager,
+kbd_backlight_dim (CsdPowerManager *manager,
                    gint idle_percentage,
                    GError **error)
 {
@@ -1359,7 +1359,7 @@ kbd_backlight_dim (GsdPowerManager *manager,
 }
 
 static gboolean
-is_session_active (GsdPowerManager *manager)
+is_session_active (CsdPowerManager *manager)
 {
         GVariant *variant;
         gboolean is_session_active = FALSE;
@@ -1375,17 +1375,17 @@ is_session_active (GsdPowerManager *manager)
 }
 
 static void
-idle_set_mode (GsdPowerManager *manager, GsdPowerIdleMode mode)
+idle_set_mode (CsdPowerManager *manager, CsdPowerIdleMode mode)
 {
         gboolean ret = FALSE;
         GError *error = NULL;
         gint idle_percentage;
-        GsdPowerActionType action_type;
+        CsdPowerActionType action_type;
         gboolean is_active = FALSE;
 
         /* Ignore attempts to set "less idle" modes */
         if (mode <= manager->priv->current_idle_mode &&
-            mode != GSD_POWER_IDLE_MODE_NORMAL) {
+            mode != CSD_POWER_IDLE_MODE_NORMAL) {
                 g_debug ("Not going to 'less idle' mode %s (current: %s)",
                          idle_mode_to_string (mode),
                          idle_mode_to_string (manager->priv->current_idle_mode));
@@ -1412,7 +1412,7 @@ idle_set_mode (GsdPowerManager *manager, GsdPowerIdleMode mode)
 
         /* if we're moving to an idle mode, make sure
          * we add a watch to take us back to normal */
-        if (mode != GSD_POWER_IDLE_MODE_NORMAL) {
+        if (mode != CSD_POWER_IDLE_MODE_NORMAL) {
                 gnome_idle_monitor_add_user_active_watch (manager->priv->idle_monitor,
                                                           idle_became_active_cb,
                                                           manager,
@@ -1420,7 +1420,7 @@ idle_set_mode (GsdPowerManager *manager, GsdPowerIdleMode mode)
         }
 
         /* save current brightness, and set dim level */
-        if (mode == GSD_POWER_IDLE_MODE_DIM) {
+        if (mode == CSD_POWER_IDLE_MODE_DIM) {
                 /* display backlight */
                 idle_percentage = g_settings_get_int (manager->priv->settings,
                                                       "idle-brightness");
@@ -1442,7 +1442,7 @@ idle_set_mode (GsdPowerManager *manager, GsdPowerIdleMode mode)
                 }
 
         /* turn off screen and kbd */
-        } else if (mode == GSD_POWER_IDLE_MODE_BLANK) {
+        } else if (mode == CSD_POWER_IDLE_MODE_BLANK) {
 
                 backlight_disable (manager);
 
@@ -1457,7 +1457,7 @@ idle_set_mode (GsdPowerManager *manager, GsdPowerIdleMode mode)
                 }
 
         /* sleep */
-        } else if (mode == GSD_POWER_IDLE_MODE_SLEEP) {
+        } else if (mode == CSD_POWER_IDLE_MODE_SLEEP) {
 
                 if (up_client_get_on_battery (manager->priv->up_client)) {
                         action_type = g_settings_get_enum (manager->priv->settings,
@@ -1469,7 +1469,7 @@ idle_set_mode (GsdPowerManager *manager, GsdPowerIdleMode mode)
                 do_power_action_type (manager, action_type);
 
         /* turn on screen and restore user-selected brightness level */
-        } else if (mode == GSD_POWER_IDLE_MODE_NORMAL) {
+        } else if (mode == CSD_POWER_IDLE_MODE_NORMAL) {
 
                 backlight_enable (manager);
 
@@ -1516,14 +1516,14 @@ idle_set_mode (GsdPowerManager *manager, GsdPowerIdleMode mode)
 }
 
 static gboolean
-idle_is_session_inhibited (GsdPowerManager  *manager,
+idle_is_session_inhibited (CsdPowerManager  *manager,
                            GsmInhibitorFlag  mask,
                            gboolean         *is_inhibited)
 {
         GVariant *variant;
         GsmInhibitorFlag inhibited_actions;
 
-        /* not yet connected to gnome-session */
+        /* not yet connected to cinnamon-session */
         if (manager->priv->session == NULL)
                 return FALSE;
 
@@ -1551,10 +1551,10 @@ clear_idle_watch (GnomeIdleMonitor *monitor,
 }
 
 static void
-idle_configure (GsdPowerManager *manager)
+idle_configure (CsdPowerManager *manager)
 {
         gboolean is_idle_inhibited;
-        GsdPowerActionType action_type;
+        CsdPowerActionType action_type;
         guint timeout_blank;
         guint timeout_sleep;
         guint timeout_dim;
@@ -1573,7 +1573,7 @@ idle_configure (GsdPowerManager *manager)
                         g_debug ("inhibited, so using normal state");
                 else
                         g_debug ("inactive, so using normal state");
-                idle_set_mode (manager, GSD_POWER_IDLE_MODE_NORMAL);
+                idle_set_mode (manager, CSD_POWER_IDLE_MODE_NORMAL);
 
                 clear_idle_watch (manager->priv->idle_monitor,
                                   &manager->priv->idle_blank_id);
@@ -1628,15 +1628,15 @@ idle_configure (GsdPowerManager *manager)
         if (timeout_sleep != 0) {
                 g_debug ("setting up sleep callback %is", timeout_sleep);
 
-                if (action_type != GSD_POWER_ACTION_NOTHING) {
+                if (action_type != CSD_POWER_ACTION_NOTHING) {
                         manager->priv->idle_sleep_id = gnome_idle_monitor_add_idle_watch (manager->priv->idle_monitor,
                                                                                           timeout_sleep * 1000,
                                                                                           idle_triggered_idle_cb, manager, NULL);
                 }
 
-                if (action_type == GSD_POWER_ACTION_LOGOUT ||
-                    action_type == GSD_POWER_ACTION_SUSPEND ||
-                    action_type == GSD_POWER_ACTION_HIBERNATE) {
+                if (action_type == CSD_POWER_ACTION_LOGOUT ||
+                    action_type == CSD_POWER_ACTION_SUSPEND ||
+                    action_type == CSD_POWER_ACTION_HIBERNATE) {
                         guint timeout_sleep_warning;
 
                         manager->priv->sleep_action_type = action_type;
@@ -1695,7 +1695,7 @@ idle_configure (GsdPowerManager *manager)
 }
 
 static void
-main_battery_or_ups_low_changed (GsdPowerManager *manager,
+main_battery_or_ups_low_changed (CsdPowerManager *manager,
                                  gboolean         is_low)
 {
         if (is_low == manager->priv->battery_is_low)
@@ -1705,7 +1705,7 @@ main_battery_or_ups_low_changed (GsdPowerManager *manager,
 }
 
 static gboolean
-temporary_unidle_done_cb (GsdPowerManager *manager)
+temporary_unidle_done_cb (CsdPowerManager *manager)
 {
         idle_set_mode (manager, manager->priv->previous_idle_mode);
         manager->priv->temporary_unidle_on_ac_id = 0;
@@ -1713,7 +1713,7 @@ temporary_unidle_done_cb (GsdPowerManager *manager)
 }
 
 static void
-set_temporary_unidle_on_ac (GsdPowerManager *manager,
+set_temporary_unidle_on_ac (CsdPowerManager *manager,
                             gboolean         enable)
 {
         if (!enable) {
@@ -1731,7 +1731,7 @@ set_temporary_unidle_on_ac (GsdPowerManager *manager,
                         g_source_remove (manager->priv->temporary_unidle_on_ac_id);
                 } else {
                         manager->priv->previous_idle_mode = manager->priv->current_idle_mode;
-                        idle_set_mode (manager, GSD_POWER_IDLE_MODE_NORMAL);
+                        idle_set_mode (manager, CSD_POWER_IDLE_MODE_NORMAL);
                 }
                 manager->priv->temporary_unidle_on_ac_id = g_timeout_add_seconds (POWER_UP_TIME_ON_AC,
                                                                                   (GSourceFunc) temporary_unidle_done_cb,
@@ -1742,28 +1742,28 @@ set_temporary_unidle_on_ac (GsdPowerManager *manager,
 static void
 up_client_on_battery_cb (UpClient *client,
                          GParamSpec *pspec,
-                         GsdPowerManager *manager)
+                         CsdPowerManager *manager)
 {
         idle_configure (manager);
 
         if (manager->priv->lid_is_closed)
                 return;
 
-        if (manager->priv->current_idle_mode == GSD_POWER_IDLE_MODE_BLANK ||
-            manager->priv->current_idle_mode == GSD_POWER_IDLE_MODE_DIM ||
+        if (manager->priv->current_idle_mode == CSD_POWER_IDLE_MODE_BLANK ||
+            manager->priv->current_idle_mode == CSD_POWER_IDLE_MODE_DIM ||
             manager->priv->temporary_unidle_on_ac_id != 0)
                 set_temporary_unidle_on_ac (manager, TRUE);
 }
 
 static void
-gsd_power_manager_finalize (GObject *object)
+csd_power_manager_finalize (GObject *object)
 {
-        GsdPowerManager *manager;
+        CsdPowerManager *manager;
 
         g_return_if_fail (object != NULL);
-        g_return_if_fail (GSD_IS_POWER_MANAGER (object));
+        g_return_if_fail (CSD_IS_POWER_MANAGER (object));
 
-        manager = GSD_POWER_MANAGER (object);
+        manager = CSD_POWER_MANAGER (object);
 
         g_return_if_fail (manager->priv != NULL);
 
@@ -1772,17 +1772,17 @@ gsd_power_manager_finalize (GObject *object)
         if (manager->priv->name_id != 0)
                 g_bus_unown_name (manager->priv->name_id);
 
-        G_OBJECT_CLASS (gsd_power_manager_parent_class)->finalize (object);
+        G_OBJECT_CLASS (csd_power_manager_parent_class)->finalize (object);
 }
 
 static void
-gsd_power_manager_class_init (GsdPowerManagerClass *klass)
+csd_power_manager_class_init (CsdPowerManagerClass *klass)
 {
         GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
-        object_class->finalize = gsd_power_manager_finalize;
+        object_class->finalize = csd_power_manager_finalize;
 
-        g_type_class_add_private (klass, sizeof (GsdPowerManagerPrivate));
+        g_type_class_add_private (klass, sizeof (CsdPowerManagerPrivate));
 }
 
 static void
@@ -1791,11 +1791,11 @@ session_presence_proxy_ready_cb (GObject *source_object,
                                  gpointer user_data)
 {
         GError *error = NULL;
-        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
+        CsdPowerManager *manager = CSD_POWER_MANAGER (user_data);
 
         manager->priv->session_presence_proxy = g_dbus_proxy_new_for_bus_finish (res, &error);
         if (manager->priv->session_presence_proxy == NULL) {
-                g_warning ("Could not connect to gnome-sesson: %s",
+                g_warning ("Could not connect to cinnamon-sesson: %s",
                            error->message);
                 g_error_free (error);
                 return;
@@ -1803,7 +1803,7 @@ session_presence_proxy_ready_cb (GObject *source_object,
 }
 
 static void
-handle_screensaver_active (GsdPowerManager *manager,
+handle_screensaver_active (CsdPowerManager *manager,
                            GVariant        *parameters)
 {
         gboolean active;
@@ -1819,12 +1819,12 @@ handle_screensaver_active (GsdPowerManager *manager,
                  *
                  * See also idle_configure() */
                 if (active)
-                        idle_set_mode (manager, GSD_POWER_IDLE_MODE_BLANK);
+                        idle_set_mode (manager, CSD_POWER_IDLE_MODE_BLANK);
         }
 }
 
 static void
-handle_wake_up_screen (GsdPowerManager *manager)
+handle_wake_up_screen (CsdPowerManager *manager)
 {
         set_temporary_unidle_on_ac (manager, TRUE);
 }
@@ -1837,9 +1837,9 @@ screensaver_signal_cb (GDBusProxy *proxy,
                        gpointer user_data)
 {
         if (g_strcmp0 (signal_name, "ActiveChanged") == 0)
-                handle_screensaver_active (GSD_POWER_MANAGER (user_data), parameters);
+                handle_screensaver_active (CSD_POWER_MANAGER (user_data), parameters);
         else if (g_strcmp0 (signal_name, "WakeUpScreen") == 0)
-                handle_wake_up_screen (GSD_POWER_MANAGER (user_data));
+                handle_wake_up_screen (CSD_POWER_MANAGER (user_data));
 }
 
 static void
@@ -1850,7 +1850,7 @@ power_keyboard_proxy_ready_cb (GObject             *source_object,
         GVariant *k_now = NULL;
         GVariant *k_max = NULL;
         GError *error = NULL;
-        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
+        CsdPowerManager *manager = CSD_POWER_MANAGER (user_data);
 
         manager->priv->upower_kdb_proxy = g_dbus_proxy_new_for_bus_finish (res, &error);
         if (manager->priv->upower_kdb_proxy == NULL) {
@@ -1913,7 +1913,7 @@ power_keyboard_proxy_ready_cb (GObject             *source_object,
 
         /* Tell the front-end that the brightness changed from
          * its default "-1/no keyboard backlight available" default */
-        backlight_iface_emit_changed (manager, GSD_POWER_DBUS_INTERFACE_KEYBOARD, manager->priv->kbd_brightness_now);
+        backlight_iface_emit_changed (manager, CSD_POWER_DBUS_INTERFACE_KEYBOARD, manager->priv->kbd_brightness_now);
 
 out:
         if (k_now != NULL)
@@ -1923,24 +1923,24 @@ out:
 }
 
 static void
-show_sleep_warning (GsdPowerManager *manager)
+show_sleep_warning (CsdPowerManager *manager)
 {
         /* close any existing notification of this class */
         notify_close_if_showing (&manager->priv->notification_sleep_warning);
 
         /* create a new notification */
         switch (manager->priv->sleep_action_type) {
-        case GSD_POWER_ACTION_LOGOUT:
+        case CSD_POWER_ACTION_LOGOUT:
                 create_notification (_("Automatic logout"), _("You will soon log out because of inactivity."),
                                      NULL,
                                      &manager->priv->notification_sleep_warning);
                 break;
-        case GSD_POWER_ACTION_SUSPEND:
+        case CSD_POWER_ACTION_SUSPEND:
                 create_notification (_("Automatic suspend"), _("Computer will suspend very soon because of inactivity."),
                                      NULL,
                                      &manager->priv->notification_sleep_warning);
                 break;
-        case GSD_POWER_ACTION_HIBERNATE:
+        case CSD_POWER_ACTION_HIBERNATE:
                 create_notification (_("Automatic hibernation"), _("Computer will suspend very soon because of inactivity."),
                                      NULL,
                                      &manager->priv->notification_sleep_warning);
@@ -1959,8 +1959,8 @@ show_sleep_warning (GsdPowerManager *manager)
 }
 
 static void
-idle_set_mode_no_temp (GsdPowerManager  *manager,
-                       GsdPowerIdleMode  mode)
+idle_set_mode_no_temp (CsdPowerManager  *manager,
+                       CsdPowerIdleMode  mode)
 {
         if (manager->priv->temporary_unidle_on_ac_id != 0 &&
             manager->priv->previous_idle_mode == mode)
@@ -1974,7 +1974,7 @@ idle_triggered_idle_cb (GnomeIdleMonitor *monitor,
                         guint             watch_id,
                         gpointer          user_data)
 {
-        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
+        CsdPowerManager *manager = CSD_POWER_MANAGER (user_data);
         const char *id_name;
 
         id_name = idle_watch_id_to_string (manager, watch_id);
@@ -1984,11 +1984,11 @@ idle_triggered_idle_cb (GnomeIdleMonitor *monitor,
                 g_debug ("idletime watch: %s (%i)", id_name, watch_id);
 
         if (watch_id == manager->priv->idle_dim_id) {
-                idle_set_mode_no_temp (manager, GSD_POWER_IDLE_MODE_DIM);
+                idle_set_mode_no_temp (manager, CSD_POWER_IDLE_MODE_DIM);
         } else if (watch_id == manager->priv->idle_blank_id) {
-                idle_set_mode_no_temp (manager, GSD_POWER_IDLE_MODE_BLANK);
+                idle_set_mode_no_temp (manager, CSD_POWER_IDLE_MODE_BLANK);
         } else if (watch_id == manager->priv->idle_sleep_id) {
-                idle_set_mode_no_temp (manager, GSD_POWER_IDLE_MODE_SLEEP);
+                idle_set_mode_no_temp (manager, CSD_POWER_IDLE_MODE_SLEEP);
         } else if (watch_id == manager->priv->idle_sleep_warning_id) {
                 show_sleep_warning (manager);
         }
@@ -1999,7 +1999,7 @@ idle_became_active_cb (GnomeIdleMonitor *monitor,
                        guint             watch_id,
                        gpointer          user_data)
 {
-        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
+        CsdPowerManager *manager = CSD_POWER_MANAGER (user_data);
 
         g_debug ("idletime reset");
 
@@ -2008,13 +2008,13 @@ idle_became_active_cb (GnomeIdleMonitor *monitor,
         /* close any existing notification about idleness */
         notify_close_if_showing (&manager->priv->notification_sleep_warning);
 
-        idle_set_mode (manager, GSD_POWER_IDLE_MODE_NORMAL);
+        idle_set_mode (manager, CSD_POWER_IDLE_MODE_NORMAL);
 }
 
 static void
 engine_settings_key_changed_cb (GSettings *settings,
                                 const gchar *key,
-                                GsdPowerManager *manager)
+                                CsdPowerManager *manager)
 {
         if (g_str_has_prefix (key, "sleep-inactive") ||
             g_str_equal (key, "idle-delay") ||
@@ -2028,7 +2028,7 @@ static void
 engine_session_properties_changed_cb (GDBusProxy      *session,
                                       GVariant        *changed,
                                       char           **invalidated,
-                                      GsdPowerManager *manager)
+                                      CsdPowerManager *manager)
 {
         GVariant *v;
 
@@ -2041,7 +2041,7 @@ engine_session_properties_changed_cb (GDBusProxy      *session,
                 /* when doing the fast-user-switch into a new account,
                  * ensure the new account is undimmed and with the backlight on */
                 if (active)
-                        idle_set_mode (manager, GSD_POWER_IDLE_MODE_NORMAL);
+                        idle_set_mode (manager, CSD_POWER_IDLE_MODE_NORMAL);
                 g_variant_unref (v);
 
         }
@@ -2060,7 +2060,7 @@ inhibit_lid_switch_done (GObject      *source,
                          gpointer      user_data)
 {
         GDBusProxy *proxy = G_DBUS_PROXY (source);
-        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
+        CsdPowerManager *manager = CSD_POWER_MANAGER (user_data);
         GError *error = NULL;
         GVariant *res;
         GUnixFDList *fd_list = NULL;
@@ -2084,7 +2084,7 @@ inhibit_lid_switch_done (GObject      *source,
 }
 
 static void
-inhibit_lid_switch (GsdPowerManager *manager)
+inhibit_lid_switch (CsdPowerManager *manager)
 {
         GVariant *params;
 
@@ -2112,7 +2112,7 @@ inhibit_lid_switch (GsdPowerManager *manager)
 }
 
 static void
-uninhibit_lid_switch (GsdPowerManager *manager)
+uninhibit_lid_switch (CsdPowerManager *manager)
 {
         if (manager->priv->inhibit_lid_switch_fd == -1) {
                 g_debug ("no lid-switch inhibitor");
@@ -2130,7 +2130,7 @@ inhibit_suspend_done (GObject      *source,
                       gpointer      user_data)
 {
         GDBusProxy *proxy = G_DBUS_PROXY (source);
-        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
+        CsdPowerManager *manager = CSD_POWER_MANAGER (user_data);
         GError *error = NULL;
         GVariant *res;
         GUnixFDList *fd_list = NULL;
@@ -2158,7 +2158,7 @@ inhibit_suspend_done (GObject      *source,
  * and do some other preparations.
  */
 static void
-inhibit_suspend (GsdPowerManager *manager)
+inhibit_suspend (CsdPowerManager *manager)
 {
         if (manager->priv->inhibit_suspend_taken) {
                 g_debug ("already inhibited lid-switch");
@@ -2182,7 +2182,7 @@ inhibit_suspend (GsdPowerManager *manager)
 }
 
 static void
-uninhibit_suspend (GsdPowerManager *manager)
+uninhibit_suspend (CsdPowerManager *manager)
 {
         if (manager->priv->inhibit_suspend_fd == -1) {
                 g_debug ("no suspend delay inhibitor");
@@ -2197,7 +2197,7 @@ uninhibit_suspend (GsdPowerManager *manager)
 static void
 on_randr_event (GnomeRRScreen *screen, gpointer user_data)
 {
-        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
+        CsdPowerManager *manager = CSD_POWER_MANAGER (user_data);
 
         g_debug ("Screen configuration changed");
 
@@ -2210,14 +2210,14 @@ on_randr_event (GnomeRRScreen *screen, gpointer user_data)
 }
 
 static void
-handle_suspend_actions (GsdPowerManager *manager)
+handle_suspend_actions (CsdPowerManager *manager)
 {
         backlight_disable (manager);
         uninhibit_suspend (manager);
 }
 
 static void
-handle_resume_actions (GsdPowerManager *manager)
+handle_resume_actions (CsdPowerManager *manager)
 {
         /* ensure we turn the panel back on after resume */
         backlight_enable (manager);
@@ -2237,7 +2237,7 @@ logind_proxy_signal_cb (GDBusProxy  *proxy,
                         GVariant    *parameters,
                         gpointer     user_data)
 {
-        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
+        CsdPowerManager *manager = CSD_POWER_MANAGER (user_data);
         gboolean is_about_to_suspend;
 
         if (g_strcmp0 (signal_name, "PrepareForSleep") != 0)
@@ -2255,17 +2255,17 @@ on_rr_screen_acquired (GObject      *object,
                        GAsyncResult *result,
                        gpointer      user_data)
 {
-        GsdPowerManager *manager = user_data;
+        CsdPowerManager *manager = user_data;
         GError *error = NULL;
 
-        gnome_settings_profile_start (NULL);
+        cinnamon_settings_profile_start (NULL);
 
         manager->priv->rr_screen = gnome_rr_screen_new_finish (result, &error);
 
         if (error) {
                 g_warning ("Could not create GnomeRRScreen: %s\n", error->message);
                 g_error_free (error);
-                gnome_settings_profile_end (NULL);
+                cinnamon_settings_profile_end (NULL);
 
                 return;
         }
@@ -2353,29 +2353,29 @@ on_rr_screen_acquired (GObject      *object,
         engine_coldplug (manager);
         idle_configure (manager);
 
-        manager->priv->xscreensaver_watchdog_timer_id = gsd_power_enable_screensaver_watchdog ();
+        manager->priv->xscreensaver_watchdog_timer_id = csd_power_enable_screensaver_watchdog ();
 
         /* don't blank inside a VM */
-        manager->priv->is_virtual_machine = gsd_power_is_hardware_a_vm ();
+        manager->priv->is_virtual_machine = csd_power_is_hardware_a_vm ();
 
         /* queue a signal in case the proxy from gnome-shell was created before we got here
            (likely, considering that to get here we need a reply from gnome-shell)
         */
         if (manager->priv->backlight_available)
-                backlight_iface_emit_changed (manager, GSD_POWER_DBUS_INTERFACE_SCREEN,
+                backlight_iface_emit_changed (manager, CSD_POWER_DBUS_INTERFACE_SCREEN,
                                               backlight_get_percentage (manager->priv->rr_screen, NULL));
         else
-                backlight_iface_emit_changed (manager, GSD_POWER_DBUS_INTERFACE_SCREEN, -1);
+                backlight_iface_emit_changed (manager, CSD_POWER_DBUS_INTERFACE_SCREEN, -1);
 
-        gnome_settings_profile_end (NULL);
+        cinnamon_settings_profile_end (NULL);
 }
 
 gboolean
-gsd_power_manager_start (GsdPowerManager *manager,
+csd_power_manager_start (CsdPowerManager *manager,
                          GError **error)
 {
         g_debug ("Starting power manager");
-        gnome_settings_profile_start (NULL);
+        cinnamon_settings_profile_start (NULL);
 
         /* Check whether we have a lid first */
         manager->priv->up_client = up_client_new ();
@@ -2408,17 +2408,17 @@ gsd_power_manager_start (GsdPowerManager *manager,
         gnome_rr_screen_new_async (gdk_screen_get_default (),
                                    on_rr_screen_acquired, manager);
 
-        manager->priv->settings = g_settings_new (GSD_POWER_SETTINGS_SCHEMA);
-        manager->priv->settings_screensaver = g_settings_new ("org.gnome.desktop.screensaver");
-        manager->priv->settings_bus = g_settings_new ("org.gnome.desktop.session");
-        manager->priv->settings_xrandr = g_settings_new (GSD_XRANDR_SETTINGS_SCHEMA);
+        manager->priv->settings = g_settings_new (CSD_POWER_SETTINGS_SCHEMA);
+        manager->priv->settings_screensaver = g_settings_new ("org.cinnamon.desktop.screensaver");
+        manager->priv->settings_bus = g_settings_new ("org.cinnamon.desktop.session");
+        manager->priv->settings_xrandr = g_settings_new (CSD_XRANDR_SETTINGS_SCHEMA);
 
-        gnome_settings_profile_end (NULL);
+        cinnamon_settings_profile_end (NULL);
         return TRUE;
 }
 
 void
-gsd_power_manager_stop (GsdPowerManager *manager)
+csd_power_manager_stop (CsdPowerManager *manager)
 {
         g_debug ("Stopping power manager");
 
@@ -2478,9 +2478,9 @@ gsd_power_manager_stop (GsdPowerManager *manager)
 }
 
 static void
-gsd_power_manager_init (GsdPowerManager *manager)
+csd_power_manager_init (CsdPowerManager *manager)
 {
-        manager->priv = GSD_POWER_MANAGER_GET_PRIVATE (manager);
+        manager->priv = CSD_POWER_MANAGER_GET_PRIVATE (manager);
         manager->priv->inhibit_lid_switch_fd = -1;
         manager->priv->inhibit_suspend_fd = -1;
         manager->priv->bus_cancellable = g_cancellable_new ();
@@ -2488,7 +2488,7 @@ gsd_power_manager_init (GsdPowerManager *manager)
 
 /* returns new level */
 static void
-handle_method_call_keyboard (GsdPowerManager *manager,
+handle_method_call_keyboard (CsdPowerManager *manager,
                              const gchar *method_name,
                              GVariant *parameters,
                              GDBusMethodInvocation *invocation)
@@ -2524,7 +2524,7 @@ handle_method_call_keyboard (GsdPowerManager *manager,
         if (!ret) {
                 g_dbus_method_invocation_take_error (invocation,
                                                      error);
-                backlight_iface_emit_changed (manager, GSD_POWER_DBUS_INTERFACE_KEYBOARD, -1);
+                backlight_iface_emit_changed (manager, CSD_POWER_DBUS_INTERFACE_KEYBOARD, -1);
         } else {
                 percentage = ABS_TO_PERCENTAGE (0,
                                                 manager->priv->kbd_brightness_max,
@@ -2532,12 +2532,12 @@ handle_method_call_keyboard (GsdPowerManager *manager,
                 g_dbus_method_invocation_return_value (invocation,
                                                        g_variant_new ("(i)",
                                                                       percentage));
-                backlight_iface_emit_changed (manager, GSD_POWER_DBUS_INTERFACE_KEYBOARD, percentage);
+                backlight_iface_emit_changed (manager, CSD_POWER_DBUS_INTERFACE_KEYBOARD, percentage);
         }
 }
 
 static void
-handle_method_call_screen (GsdPowerManager *manager,
+handle_method_call_screen (CsdPowerManager *manager,
                            const gchar *method_name,
                            GVariant *parameters,
                            GDBusMethodInvocation *invocation)
@@ -2547,8 +2547,8 @@ handle_method_call_screen (GsdPowerManager *manager,
 
         if (!manager->priv->backlight_available) {
                g_set_error_literal (&error,
-                                    GSD_POWER_MANAGER_ERROR,
-                                    GSD_POWER_MANAGER_ERROR_FAILED,
+                                    CSD_POWER_MANAGER_ERROR,
+                                    CSD_POWER_MANAGER_ERROR_FAILED,
                                     "Screen backlight not available");
                 goto out;
         }
@@ -2556,11 +2556,11 @@ handle_method_call_screen (GsdPowerManager *manager,
         if (g_strcmp0 (method_name, "StepUp") == 0) {
                 g_debug ("screen step up");
                 value = backlight_step_up (manager->priv->rr_screen, &error);
-                backlight_iface_emit_changed (manager, GSD_POWER_DBUS_INTERFACE_SCREEN, value);
+                backlight_iface_emit_changed (manager, CSD_POWER_DBUS_INTERFACE_SCREEN, value);
         } else if (g_strcmp0 (method_name, "StepDown") == 0) {
                 g_debug ("screen step down");
                 value = backlight_step_down (manager->priv->rr_screen, &error);
-                backlight_iface_emit_changed (manager, GSD_POWER_DBUS_INTERFACE_SCREEN, value);
+                backlight_iface_emit_changed (manager, CSD_POWER_DBUS_INTERFACE_SCREEN, value);
         } else {
                 g_assert_not_reached ();
         }
@@ -2587,7 +2587,7 @@ handle_method_call (GDBusConnection       *connection,
                     GDBusMethodInvocation *invocation,
                     gpointer               user_data)
 {
-        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
+        CsdPowerManager *manager = CSD_POWER_MANAGER (user_data);
 
         /* Check session pointer as a proxy for whether the manager is in the
            start or stop state */
@@ -2598,12 +2598,12 @@ handle_method_call (GDBusConnection       *connection,
         g_debug ("Calling method '%s.%s' for Power",
                  interface_name, method_name);
 
-        if (g_strcmp0 (interface_name, GSD_POWER_DBUS_INTERFACE_SCREEN) == 0) {
+        if (g_strcmp0 (interface_name, CSD_POWER_DBUS_INTERFACE_SCREEN) == 0) {
                 handle_method_call_screen (manager,
                                            method_name,
                                            parameters,
                                            invocation);
-        } else if (g_strcmp0 (interface_name, GSD_POWER_DBUS_INTERFACE_KEYBOARD) == 0) {
+        } else if (g_strcmp0 (interface_name, CSD_POWER_DBUS_INTERFACE_KEYBOARD) == 0) {
                 handle_method_call_keyboard (manager,
                                              method_name,
                                              parameters,
@@ -2614,7 +2614,7 @@ handle_method_call (GDBusConnection       *connection,
 }
 
 static GVariant *
-handle_get_property_other (GsdPowerManager *manager,
+handle_get_property_other (CsdPowerManager *manager,
                            const gchar *interface_name,
                            const gchar *property_name,
                            GError **error)
@@ -2628,10 +2628,10 @@ handle_get_property_other (GsdPowerManager *manager,
                 return NULL;
         }
 
-        if (g_strcmp0 (interface_name, GSD_POWER_DBUS_INTERFACE_SCREEN) == 0) {
+        if (g_strcmp0 (interface_name, CSD_POWER_DBUS_INTERFACE_SCREEN) == 0) {
                 value = backlight_get_percentage (manager->priv->rr_screen, NULL);
                 retval = g_variant_new_int32 (value);
-        } else if (g_strcmp0 (interface_name, GSD_POWER_DBUS_INTERFACE_KEYBOARD) == 0) {
+        } else if (g_strcmp0 (interface_name, CSD_POWER_DBUS_INTERFACE_KEYBOARD) == 0) {
                 value = manager->priv->kbd_brightness_now;
                 retval =  g_variant_new_int32 (value);
         }
@@ -2651,7 +2651,7 @@ handle_get_property (GDBusConnection *connection,
                      const gchar *property_name,
                      GError **error, gpointer user_data)
 {
-        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
+        CsdPowerManager *manager = CSD_POWER_MANAGER (user_data);
 
         /* Check session pointer as a proxy for whether the manager is in the
            start or stop state */
@@ -2661,8 +2661,8 @@ handle_get_property (GDBusConnection *connection,
                 return NULL;
         }
 
-        if (g_strcmp0 (interface_name, GSD_POWER_DBUS_INTERFACE_SCREEN) == 0 ||
-                   g_strcmp0 (interface_name, GSD_POWER_DBUS_INTERFACE_KEYBOARD) == 0) {
+        if (g_strcmp0 (interface_name, CSD_POWER_DBUS_INTERFACE_SCREEN) == 0 ||
+                   g_strcmp0 (interface_name, CSD_POWER_DBUS_INTERFACE_KEYBOARD) == 0) {
                 return handle_get_property_other (manager, interface_name, property_name, error);
         } else {
                 g_set_error (error, G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
@@ -2672,7 +2672,7 @@ handle_get_property (GDBusConnection *connection,
 }
 
 static gboolean
-handle_set_property_other (GsdPowerManager *manager,
+handle_set_property_other (CsdPowerManager *manager,
                            const gchar *interface_name,
                            const gchar *property_name,
                            GVariant *value,
@@ -2686,22 +2686,22 @@ handle_set_property_other (GsdPowerManager *manager,
                 return FALSE;
         }
 
-        if (g_strcmp0 (interface_name, GSD_POWER_DBUS_INTERFACE_SCREEN) == 0) {
+        if (g_strcmp0 (interface_name, CSD_POWER_DBUS_INTERFACE_SCREEN) == 0) {
                 g_variant_get (value, "i", &brightness_value);
                 if (backlight_set_percentage (manager->priv->rr_screen, &brightness_value, error)) {
-                        backlight_iface_emit_changed (manager, GSD_POWER_DBUS_INTERFACE_SCREEN, brightness_value);
+                        backlight_iface_emit_changed (manager, CSD_POWER_DBUS_INTERFACE_SCREEN, brightness_value);
                         return TRUE;
                 } else {
                         g_set_error (error, G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
                                      "Setting %s.%s failed", interface_name, property_name);
                         return FALSE;
                 }
-        } else if (g_strcmp0 (interface_name, GSD_POWER_DBUS_INTERFACE_KEYBOARD) == 0) {
+        } else if (g_strcmp0 (interface_name, CSD_POWER_DBUS_INTERFACE_KEYBOARD) == 0) {
                 g_variant_get (value, "i", &brightness_value);
                 brightness_value = PERCENTAGE_TO_ABS (0, manager->priv->kbd_brightness_max,
                                                       brightness_value);
                 if (upower_kbd_set_brightness (manager, brightness_value, error)) {
-                        backlight_iface_emit_changed (manager, GSD_POWER_DBUS_INTERFACE_KEYBOARD, brightness_value);
+                        backlight_iface_emit_changed (manager, CSD_POWER_DBUS_INTERFACE_KEYBOARD, brightness_value);
                         return TRUE;
                 } else {
                         g_set_error (error, G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
@@ -2724,7 +2724,7 @@ handle_set_property (GDBusConnection *connection,
                      GVariant *value,
                      GError **error, gpointer user_data)
 {
-        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
+        CsdPowerManager *manager = CSD_POWER_MANAGER (user_data);
 
         /* Check session pointer as a proxy for whether the manager is in the
            start or stop state */
@@ -2732,8 +2732,8 @@ handle_set_property (GDBusConnection *connection,
                 return FALSE;
         }
 
-        if (g_strcmp0 (interface_name, GSD_POWER_DBUS_INTERFACE_SCREEN) == 0 ||
-            g_strcmp0 (interface_name, GSD_POWER_DBUS_INTERFACE_KEYBOARD) == 0) {
+        if (g_strcmp0 (interface_name, CSD_POWER_DBUS_INTERFACE_SCREEN) == 0 ||
+            g_strcmp0 (interface_name, CSD_POWER_DBUS_INTERFACE_KEYBOARD) == 0) {
                 return handle_set_property_other (manager, interface_name, property_name, value, error);
         } else {
                 g_set_error (error, G_DBUS_ERROR, G_DBUS_ERROR_FAILED,
@@ -2752,7 +2752,7 @@ static const GDBusInterfaceVTable interface_vtable =
 static void
 on_bus_gotten (GObject             *source_object,
                GAsyncResult        *res,
-               GsdPowerManager     *manager)
+               CsdPowerManager     *manager)
 {
         GDBusConnection *connection;
         GDBusInterfaceInfo **infos;
@@ -2772,7 +2772,7 @@ on_bus_gotten (GObject             *source_object,
         infos = manager->priv->introspection_data->interfaces;
         for (i = 0; infos[i] != NULL; i++) {
                 g_dbus_connection_register_object (connection,
-                                                   GSD_POWER_DBUS_PATH,
+                                                   CSD_POWER_DBUS_PATH,
                                                    infos[i],
                                                    &interface_vtable,
                                                    manager,
@@ -2781,7 +2781,7 @@ on_bus_gotten (GObject             *source_object,
         }
 
         manager->priv->name_id = g_bus_own_name_on_connection (connection,
-                                                               GSD_POWER_DBUS_NAME,
+                                                               CSD_POWER_DBUS_NAME,
                                                                G_BUS_NAME_OWNER_FLAGS_NONE,
                                                                NULL,
                                                                NULL,
@@ -2790,7 +2790,7 @@ on_bus_gotten (GObject             *source_object,
 }
 
 static void
-register_manager_dbus (GsdPowerManager *manager)
+register_manager_dbus (CsdPowerManager *manager)
 {
         manager->priv->introspection_data = g_dbus_node_info_new_for_xml (introspection_xml, NULL);
         g_assert (manager->priv->introspection_data != NULL);
@@ -2801,16 +2801,16 @@ register_manager_dbus (GsdPowerManager *manager)
                    manager);
 }
 
-GsdPowerManager *
-gsd_power_manager_new (void)
+CsdPowerManager *
+csd_power_manager_new (void)
 {
         if (manager_object != NULL) {
                 g_object_ref (manager_object);
         } else {
-                manager_object = g_object_new (GSD_TYPE_POWER_MANAGER, NULL);
+                manager_object = g_object_new (CSD_TYPE_POWER_MANAGER, NULL);
                 g_object_add_weak_pointer (manager_object,
                                            (gpointer *) &manager_object);
                 register_manager_dbus (manager_object);
         }
-        return GSD_POWER_MANAGER (manager_object);
+        return CSD_POWER_MANAGER (manager_object);
 }
