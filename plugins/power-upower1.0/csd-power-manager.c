@@ -34,7 +34,7 @@
 
 #define GNOME_DESKTOP_USE_UNSTABLE_API
 #include <libcinnamon-desktop/gnome-rr.h>
-#include <libcinnamon-desktop/gnome-idle-monitor.h>
+#include "gnome-idle-monitor.h"
 
 #include <csd-input-helper.h>
 
