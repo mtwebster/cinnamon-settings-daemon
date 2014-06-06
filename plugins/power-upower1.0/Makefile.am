@@ -104,49 +104,6 @@ EXTRA_DIST += 						\
 	org.cinnamon.settings-daemon.plugins.power.policy.in.in
 endif
 
-# Enums
-CSD_POWER_ENUM_FILES = csd-power-enums.c csd-power-enums.h
-
-csd-power-enums.h: gsm-inhibitor-flag.h gsm-presence-flag.h Makefile
-	$(AM_V_GEN)($(GLIB_MKENUMS) \
-			--fhead "#ifndef CSD_POWER_ENUMS_H\n#define CSD_POWER_ENUMS_H\n\n#include <glib-object.h>\n\nG_BEGIN_DECLS\n" \
-			--fprod "/* enumerations from \"@filename@\" */\n" \
-			--vhead "GType @enum_name@_get_type (void) G_GNUC_CONST;\n#define CSD_POWER_TYPE_@ENUMSHORT@ (@enum_name@_get_type())\n" \
-			--ftail "G_END_DECLS\n\n#endif /* !CSD_POWER_ENUMS_H */" $(srcdir)/gsm-inhibitor-flag.h $(srcdir)/gsm-presence-flag.h > $@)
-
-csd-power-enums.c: csd-power-constants.h gsm-inhibitor-flag.h gsm-presence-flag.h Makefile csd-power-enums.h
-	$(AM_V_GEN)($(GLIB_MKENUMS) \
-			--fhead "#include \"gsm-inhibitor-flag.h\"\n#include \"gsm-presence-flag.h\"\n#include \"csd-power-enums.h\"" \
-			--fprod "\n/* enumerations from \"@filename@\" */" \
-			--vhead "GType\n@enum_name@_get_type (void)\n{\n  static GType etype = 0;\n  if (etype == 0) {\n    static const G@Type@Value values[] = {" \
-			--vprod "      { @VALUENAME@, \"@VALUENAME@\", \"@valuenick@\" }," \
-			--vtail "      { 0, NULL, NULL }\n    };\n    etype = g_@type@_register_static (\"@EnumName@\", values);\n  }\n  return etype;\n}\n" \
-		$(srcdir)/gsm-inhibitor-flag.h $(srcdir)/gsm-presence-flag.h > $@)
-
-BUILT_SOURCES += $(CSD_POWER_ENUM_FILES)
-
-csdpowerconstants.py: csd-power-constants-update.pl csd-power-constants.h
-	$(AM_V_GEN) $(srcdir)/csd-power-constants-update.pl
-
-csdpowerenums.py: csd-power-enums-update csd-power-enums.h csd-power-enums.c
-	$(AM_V_GEN) $(builddir)/csd-power-enums-update > $@
-
-noinst_PROGRAMS += csd-power-enums-update
-csd_power_enums_update_SOURCES =		\
-	csd-power-enums-update.c		\
-	csd-power-enums.h			\
-	csd-power-enums.c
-csd_power_enums_update_CFLAGS = $(libpower_la_CFLAGS)
-csd_power_enums_update_CPPFLAGS = $(libpower_la_CPPFLAGS) -I$(top_builddir)/plugins/power
-csd_power_enums_update_LDFLAGS = $(POWER_LIBS)
-
-EXTRA_DIST += csd-power-constants-update.pl csdpowerconstants.py csdpowerenums.py test.py
-
-check-local: $(top_builddir)/tests/shiftkey csd-test-power test.py csdpowerconstants.py csdpowerenums.py
-# This is how you run a single test
-#	BUILDDIR=$(builddir) TOP_BUILDDIR=$(top_builddir) ${PYTHON} $(srcdir)/test.py PowerPluginTest.test_sleep_inactive_blank
-	BUILDDIR=$(builddir) TOP_BUILDDIR=$(top_builddir) ${PYTHON} $(srcdir)/test.py
-
 clean-local:
 	rm -f *~
 
