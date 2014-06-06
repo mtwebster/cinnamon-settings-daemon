@@ -1,4 +1,5 @@
 NULL =
+BUILT_SOURCES = $(NULL)
 
 INCLUDES = \
 	-DDATADIR=\""$(datadir)"\"				\
@@ -19,9 +20,23 @@ privlib_LTLIBRARIES =		\
 	libcsd.la		\
 	$(NULL)
 
+screen_saver_dbus_built_sources = csd-screen-saver-glue.c csd-screen-saver-glue.h
+
+BUILT_SOURCES += $(screen_saver_dbus_built_sources)
+
+$(screen_saver_dbus_built_sources) : Makefile.am org.cinnamon.ScreenSaver.xml
+	gdbus-codegen \
+		--interface-prefix org.cinnamon.ScreenSaver. \
+		--generate-c-code csd-screen-saver-glue \
+		--c-namespace Csd \
+		--annotate "org.cinnamon.ScreenSaver" \
+		"org.gtk.GDBus.C.Name" ScreenSaver \
+		$(srcdir)/org.cinnamon.ScreenSaver.xml
+
 libcsd_la_SOURCES =		\
 	cinnamon-settings-profile.c	\
 	cinnamon-settings-profile.h	\
+	$(BUILT_SOURCES) \
 	cinnamon-settings-session.c	\
 	cinnamon-settings-session.h	\
 	$(NULL)
@@ -80,5 +95,8 @@ cinnamon_settings_daemon_LDADD = 		\
 	$(LIBNOTIFY_LIBS)		\
 	$(GNOME_DESKTOP_LIBS)		\
 	$(NULL)
+
+EXTRA_DIST = org.cinnamon.ScreenSaver.xml \
+			 $(NULL)
 
 # vim: ts=8

@@ -25,7 +25,7 @@ libpower_la_CPPFLAGS = \
 	-I$(top_srcdir)/cinnamon-settings-daemon		\
 	-I$(top_builddir)/cinnamon-settings-daemon		\
 	-I$(top_srcdir)/plugins/common			\
-	-DGNOME_SETTINGS_LOCALEDIR=\""$(datadir)/locale"\" \
+	-DCINNAMON_SETTINGS_LOCALEDIR=\""$(datadir)/locale"\" \
 	-DGTKBUILDERDIR=\""$(pkgdatadir)"\"		\
 	-DSBINDIR=\"$(sbindir)\"			\
 	-DLIBEXECDIR=\"$(libexecdir)\"			\

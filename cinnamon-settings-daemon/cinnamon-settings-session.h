@@ -58,6 +58,8 @@ GType			 cinnamon_settings_session_state_get_type	(void);
 CinnamonSettingsSession	*cinnamon_settings_session_new		(void);
 CinnamonSettingsSessionState cinnamon_settings_session_get_state	(CinnamonSettingsSession	*session);
 
+static GDBusProxy *cinnamon_settings_session_get_session_proxy (void);
+CsdScreenSaver *cinnamon_settings_session_get_screen_saver_proxy (void);
 
 G_END_DECLS
 

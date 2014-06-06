@@ -25,4 +25,4 @@
 #include "cinnamon-settings-plugin.h"
 #include "csd-power-manager.h"
 
-CINNAMON_SETTINGS_PLUGIN_REGISTER (CsdPower, csd_power)
+NEW_CINNAMON_SETTINGS_PLUGIN_REGISTER (CsdPower, csd_power)

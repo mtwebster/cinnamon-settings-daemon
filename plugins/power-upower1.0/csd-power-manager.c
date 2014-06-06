@@ -45,7 +45,8 @@
 #include "gpm-common.h"
 #include "cinnamon-settings-plugin.h"
 #include "cinnamon-settings-profile.h"
-#include "cinnamon-settings-bus.h"
+#include "cinnamon-settings-session.h"
+#include "csd-screensaver-proxy-manager.h"
 #include "csd-enums.h"
 #include "csd-power-manager.h"
 
@@ -2290,12 +2291,12 @@ on_rr_screen_acquired (GObject      *object,
         inhibit_suspend (manager);
 
         /* track the active session */
-        manager->priv->session = gnome_settings_bus_get_session_proxy ();
+        manager->priv->session = cinnamon_settings_session_get_session_proxy ();
         g_signal_connect (manager->priv->session, "g-properties-changed",
                           G_CALLBACK (engine_session_properties_changed_cb),
                           manager);
 
-        manager->priv->screensaver_proxy = gnome_settings_bus_get_screen_saver_proxy ();
+        manager->priv->screensaver_proxy = cinnamon_settings_session_get_screen_saver_proxy ();
 
         g_signal_connect (manager->priv->screensaver_proxy, "g-signal",
                           G_CALLBACK (screensaver_signal_cb), manager);
