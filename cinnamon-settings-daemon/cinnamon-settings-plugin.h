@@ -33,6 +33,10 @@ G_BEGIN_DECLS
 #define CINNAMON_IS_SETTINGS_PLUGIN_CLASS(klass)   (G_TYPE_CHECK_CLASS_TYPE ((klass), CINNAMON_TYPE_SETTINGS_PLUGIN))
 #define CINNAMON_SETTINGS_PLUGIN_GET_CLASS(obj)    (G_TYPE_INSTANCE_GET_CLASS((obj),  CINNAMON_TYPE_SETTINGS_PLUGIN, CinnamonSettingsPluginClass))
 
+#define CSD_DBUS_NAME "org.cinnamon.SettingsDaemon"
+#define CSD_DBUS_PATH "/org/cinnamon/SettingsDaemon"
+#define CSD_DBUS_BASE_INTERFACE "org.cinnamon.SettingsDaemon"
+
 typedef struct
 {
         GObject parent;

@@ -46,7 +46,6 @@
 #include "cinnamon-settings-plugin.h"
 #include "cinnamon-settings-profile.h"
 #include "cinnamon-settings-session.h"
-#include "csd-screensaver-proxy-manager.h"
 #include "csd-enums.h"
 #include "csd-power-manager.h"
 

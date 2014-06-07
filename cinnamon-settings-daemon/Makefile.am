@@ -20,6 +20,19 @@ privlib_LTLIBRARIES =		\
 	libcsd.la		\
 	$(NULL)
 
+session_manager_dbus_built_sources = csd-session-manager-glue.c csd-session-manager-glue.h
+
+BUILT_SOURCES += $(session_manager_dbus_built_sources)
+
+$(session_manager_dbus_built_sources) : Makefile.am org.gnome.SessionManager.xml
+	gdbus-codegen                           \
+		--interface-prefix org.gnome.SessionManager.        \
+		--generate-c-code csd-session-manager-glue      \
+		--c-namespace Csd                   \
+		--annotate "org.gnome.SessionManager"           \
+				   "org.gtk.GDBus.C.Name" SessionManager    \
+		$(srcdir)/org.gnome.SessionManager.xml
+
 screen_saver_dbus_built_sources = csd-screen-saver-glue.c csd-screen-saver-glue.h
 
 BUILT_SOURCES += $(screen_saver_dbus_built_sources)

@@ -160,7 +160,7 @@ static gpointer manager_object = NULL;
 #define CINNAMON_SCREENSAVER_DBUS_NAME "org.cinnamon.ScreenSaver"
 #define CINNAMON_SCREENSAVER_DBUS_OBJECT "/org/cinnamon/ScreenSaver"
 
-static GDBusProxy *
+CsdSessionManager *
 cinnamon_settings_session_get_session_proxy (void)
 {
         static GDBusProxy *session_proxy;
