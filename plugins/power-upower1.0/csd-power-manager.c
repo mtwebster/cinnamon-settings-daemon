@@ -2250,25 +2250,46 @@ logind_proxy_signal_cb (GDBusProxy  *proxy,
         }
 }
 
-static void
-on_rr_screen_acquired (GObject      *object,
-                       GAsyncResult *result,
-                       gpointer      user_data)
+gboolean
+csd_power_manager_start (CsdPowerManager *manager,
+                         GError **error)
 {
-        CsdPowerManager *manager = user_data;
-        GError *error = NULL;
+        g_debug ("Starting power manager");
 
         cinnamon_settings_profile_start (NULL);
 
-        manager->priv->rr_screen = gnome_rr_screen_new_finish (result, &error);
+        /* Check whether we have a lid first */
+        manager->priv->up_client = up_client_new ();
+        manager->priv->lid_is_present = up_client_get_lid_is_present (manager->priv->up_client);
+        if (manager->priv->lid_is_present)
+                manager->priv->lid_is_closed = up_client_get_lid_is_closed (manager->priv->up_client);
 
-        if (error) {
-                g_warning ("Could not create GnomeRRScreen: %s\n", error->message);
-                g_error_free (error);
-                cinnamon_settings_profile_end (NULL);
-
-                return;
+        /* Set up the logind proxy */
+        manager->priv->logind_proxy =
+                g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
+                                               0,
+                                               NULL,
+                                               SYSTEMD_DBUS_NAME,
+                                               SYSTEMD_DBUS_PATH,
+                                               SYSTEMD_DBUS_INTERFACE,
+                                               NULL,
+                                               error);
+        if (manager->priv->logind_proxy == NULL) {
+                g_debug ("No systemd (logind) support, disabling plugin");
+                return FALSE;
         }
+
+        /* Check for XTEST support */
+        if (supports_xtest () == FALSE) {
+                g_debug ("XTEST extension required, disabling plugin");
+                return FALSE;
+        }
+
+        /* coldplug the list of screens */
+
+        manager->priv->rr_screen = gnome_rr_screen_new (gdk_screen_get_default (), error);
+        if (manager->priv->rr_screen == NULL)
+                return FALSE;
 
         /* set up the screens */
         if (manager->priv->lid_is_present) {
@@ -2366,47 +2387,6 @@ on_rr_screen_acquired (GObject      *object,
                                               backlight_get_percentage (manager->priv->rr_screen, NULL));
         else
                 backlight_iface_emit_changed (manager, CSD_POWER_DBUS_INTERFACE_SCREEN, -1);
-
-        cinnamon_settings_profile_end (NULL);
-}
-
-gboolean
-csd_power_manager_start (CsdPowerManager *manager,
-                         GError **error)
-{
-        g_debug ("Starting power manager");
-        cinnamon_settings_profile_start (NULL);
-
-        /* Check whether we have a lid first */
-        manager->priv->up_client = up_client_new ();
-        manager->priv->lid_is_present = up_client_get_lid_is_present (manager->priv->up_client);
-        if (manager->priv->lid_is_present)
-                manager->priv->lid_is_closed = up_client_get_lid_is_closed (manager->priv->up_client);
-
-        /* Set up the logind proxy */
-        manager->priv->logind_proxy =
-                g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SYSTEM,
-                                               0,
-                                               NULL,
-                                               SYSTEMD_DBUS_NAME,
-                                               SYSTEMD_DBUS_PATH,
-                                               SYSTEMD_DBUS_INTERFACE,
-                                               NULL,
-                                               error);
-        if (manager->priv->logind_proxy == NULL) {
-                g_debug ("No systemd (logind) support, disabling plugin");
-                return FALSE;
-        }
-
-        /* Check for XTEST support */
-        if (supports_xtest () == FALSE) {
-                g_debug ("XTEST extension required, disabling plugin");
-                return FALSE;
-        }
-
-        /* coldplug the list of screens */
-        gnome_rr_screen_new_async (gdk_screen_get_default (),
-                                   on_rr_screen_acquired, manager);
 
         manager->priv->settings = g_settings_new (CSD_POWER_SETTINGS_SCHEMA);
         manager->priv->settings_screensaver = g_settings_new ("org.cinnamon.desktop.screensaver");

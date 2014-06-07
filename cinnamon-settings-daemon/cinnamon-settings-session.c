@@ -442,32 +442,30 @@ cinnamon_settings_session_new (void)
 	return CINNAMON_SETTINGS_SESSION (session);
 }
 
-CsdSessionManager *
-cinnamon_settings_session_get_session_proxy (void)
+GsdSessionManager *
+gnome_settings_bus_get_session_proxy (void)
 {
-        static GDBusProxy *session_proxy;
-        GError *error =  NULL;
+    static GsdSessionManager *session_proxy;
+    GError *error = NULL;
 
-        if (session_proxy != NULL) {
-                g_object_ref (session_proxy);
+    if (session_proxy != NULL) {
+        g_object_ref (session_proxy);
+    } else {
+        session_proxy = gsd_session_manager_proxy_new_for_bus_sync (G_BUS_TYPE_SESSION,
+                                                                    G_DBUS_PROXY_FLAGS_NONE,
+                                                                    GNOME_SESSION_DBUS_NAME,
+                                                                    GNOME_SESSION_DBUS_OBJECT,
+                                                                    NULL,
+                                                                    &error);
+        if (error) {
+            g_warning ("Failed to connect to the session manager: %s", error->message);
+            g_error_free (error);
         } else {
-                session_proxy = g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SESSION,
-                                                               G_DBUS_PROXY_FLAGS_NONE,
-                                                               NULL,
-                                                               GNOME_SESSION_DBUS_NAME,
-                                                               GNOME_SESSION_DBUS_OBJECT,
-                                                               GNOME_SESSION_DBUS_INTERFACE,
-                                                               NULL,
-                                                               &error);
-                if (error) {
-                        g_warning ("Failed to connect to the session manager: %s", error->message);
-                        g_error_free (error);
-                } else {
-                        g_object_add_weak_pointer (G_OBJECT (session_proxy), (gpointer*)&session_proxy);
-                }
+           g_object_add_weak_pointer (G_OBJECT (session_proxy), (gpointer*)&session_proxy);
         }
+    }
 
-        return session_proxy;
+    return session_proxy;
 }
 
 CsdScreenSaver *
