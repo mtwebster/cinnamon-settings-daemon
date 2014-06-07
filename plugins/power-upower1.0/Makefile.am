@@ -6,8 +6,6 @@ plugin_LTLIBRARIES =					\
 	libpower.la
 
 libpower_la_SOURCES = 					\
-	gnome-idle-monitor.c				\
-	gnome-idle-monitor.h				\
 	gpm-common.c					\
 	gpm-common.h					\
 	csd-backlight-linux.c				\

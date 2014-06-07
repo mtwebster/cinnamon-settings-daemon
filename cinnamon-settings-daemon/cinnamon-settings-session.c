@@ -32,6 +32,13 @@
 #ifdef HAVE_SYSTEMD
 #include <systemd/sd-login.h>
 
+#define GNOME_SESSION_DBUS_NAME      "org.gnome.SessionManager"
+#define GNOME_SESSION_DBUS_OBJECT    "/org/gnome/SessionManager"
+#define GNOME_SESSION_DBUS_INTERFACE "org.gnome.SessionManager"
+
+#define CINNAMON_SCREENSAVER_DBUS_NAME "org.cinnamon.ScreenSaver"
+#define CINNAMON_SCREENSAVER_DBUS_OBJECT "/org/cinnamon/ScreenSaver"
+
 typedef struct
 {
   GSource source;
@@ -433,4 +440,59 @@ cinnamon_settings_session_new (void)
 	CinnamonSettingsSession *session;
 	session = g_object_new (CINNAMON_TYPE_SETTINGS_SESSION, NULL);
 	return CINNAMON_SETTINGS_SESSION (session);
+}
+
+CsdSessionManager *
+cinnamon_settings_session_get_session_proxy (void)
+{
+        static GDBusProxy *session_proxy;
+        GError *error =  NULL;
+
+        if (session_proxy != NULL) {
+                g_object_ref (session_proxy);
+        } else {
+                session_proxy = g_dbus_proxy_new_for_bus_sync (G_BUS_TYPE_SESSION,
+                                                               G_DBUS_PROXY_FLAGS_NONE,
+                                                               NULL,
+                                                               GNOME_SESSION_DBUS_NAME,
+                                                               GNOME_SESSION_DBUS_OBJECT,
+                                                               GNOME_SESSION_DBUS_INTERFACE,
+                                                               NULL,
+                                                               &error);
+                if (error) {
+                        g_warning ("Failed to connect to the session manager: %s", error->message);
+                        g_error_free (error);
+                } else {
+                        g_object_add_weak_pointer (G_OBJECT (session_proxy), (gpointer*)&session_proxy);
+                }
+        }
+
+        return session_proxy;
+}
+
+CsdScreenSaver *
+cinnamon_settings_session_get_screen_saver_proxy (void)
+{
+    static CsdScreenSaver *screen_saver_proxy;
+    GError *error = NULL;
+
+    if (screen_saver_proxy != NULL) {
+        g_object_ref (screen_saver_proxy);
+    } else {
+        screen_saver_proxy = csd_screen_saver_proxy_new_for_bus_sync (G_BUS_TYPE_SESSION,
+                                                                      G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES |
+                                                                      G_DBUS_PROXY_FLAGS_DO_NOT_AUTO_START,
+                                                                      CINNAMON_SCREENSAVER_DBUS_NAME,
+                                                                      CINNAMON_SCREENSAVER_DBUS_OBJECT,
+                                                                      NULL,
+                                                                      &error);
+        if (error) {
+            g_warning ("Failed to connect to the screen saver: %s", error->message);
+            g_error_free (error);
+        } else {
+            g_object_add_weak_pointer (G_OBJECT (screen_saver_proxy), (gpointer*)&screen_saver_proxy);
+        }
+    }
+
+    return screen_saver_proxy;
 }

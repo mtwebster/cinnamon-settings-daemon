@@ -49,6 +49,8 @@ $(screen_saver_dbus_built_sources) : Makefile.am org.cinnamon.ScreenSaver.xml
 libcsd_la_SOURCES =		\
 	cinnamon-settings-profile.c	\
 	cinnamon-settings-profile.h	\
+	gnome-idle-monitor.c \
+	gnome-idle-monitor.h \
 	$(BUILT_SOURCES) \
 	cinnamon-settings-session.c	\
 	cinnamon-settings-session.h	\
