@@ -1707,7 +1707,7 @@ do_action (CsdMediaKeysManager *manager,
 	case C_DESKTOP_MEDIA_KEY_TOGGLE_CONTRAST:
 		do_toggle_contrast_action (manager);
 		break;
-        case C_DESKTOP_MEDIA_KEY_POWER:
+        case C_DESKTOP_MEDIA_KEY_SHUTDOWN:
                 do_config_power_action (manager, "button-power");
                 break;
         case C_DESKTOP_MEDIA_KEY_SUSPEND:
