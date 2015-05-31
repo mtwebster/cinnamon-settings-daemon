@@ -44,6 +44,12 @@
 
 #define PLUGIN_EXT ".cinnamon-settings-plugin"
 
+/* plugins with a priority of this value or less load before c-s-d
+ * registers with cinnamon-session.  This ensures they are fully
+ * loaded before the next phase of startup begins
+ */
+#define PRE_REGISTRATION_PRIORITY_LIMIT 10
+
 #define CINNAMON_SETTINGS_MANAGER_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE ((o), CINNAMON_TYPE_SETTINGS_MANAGER, CinnamonSettingsManagerPrivate))
 
 static const gchar introspection_xml[] =
@@ -88,9 +94,27 @@ cinnamon_settings_manager_error_quark (void)
         return ret;
 }
 
+static gboolean
+skip_plugin (CinnamonSettingsPluginInfo *info, gboolean early)
+{
+    gboolean pre_reg_plugin = cinnamon_settings_plugin_info_get_priority (info) <= 
+                                  PRE_REGISTRATION_PRIORITY_LIMIT;
+
+    return (!early && pre_reg_plugin) ||
+           (early && !pre_reg_plugin);
+}
+
 static void
 maybe_activate_plugin (CinnamonSettingsPluginInfo *info, gpointer user_data)
 {
+        gboolean early = GPOINTER_TO_INT (user_data);
+
+        if (skip_plugin (info, early)) {
+            g_debug ("Skipping plugin %s. (wrong side of c-s-d registration)",
+                     cinnamon_settings_plugin_info_get_location (info));
+            return;
+        }
+
         if (cinnamon_settings_plugin_info_get_enabled (info)) {
                 gboolean res;
                 res = cinnamon_settings_plugin_info_activate (info);
@@ -293,15 +317,26 @@ _load_dir (CinnamonSettingsManager *manager,
 }
 
 static void
-_load_all (CinnamonSettingsManager *manager)
+start_pre_registration_modules (CinnamonSettingsManager *manager)
 {
         cinnamon_settings_profile_start (NULL);
 
-        /* load system plugins */
-        _load_dir (manager, CINNAMON_SETTINGS_PLUGINDIR G_DIR_SEPARATOR_S);
+        g_slist_foreach (manager->priv->plugins,
+                         (GFunc) maybe_activate_plugin,
+                         GINT_TO_POINTER (TRUE));
 
-        manager->priv->plugins = g_slist_sort (manager->priv->plugins, (GCompareFunc) compare_priority);
-        g_slist_foreach (manager->priv->plugins, (GFunc) maybe_activate_plugin, NULL);
+        cinnamon_settings_profile_end (NULL);
+}
+
+static void
+start_post_registration_modules (CinnamonSettingsManager *manager)
+{
+        cinnamon_settings_profile_start (NULL);
+
+        g_slist_foreach (manager->priv->plugins,
+                         (GFunc) maybe_activate_plugin,
+                         GINT_TO_POINTER (FALSE));
+
         cinnamon_settings_profile_end (NULL);
 }
 
@@ -365,7 +400,7 @@ cinnamon_settings_manager_start (CinnamonSettingsManager *manager,
 {
         gboolean ret;
 
-        g_debug ("Starting settings manager");
+        g_debug ("Starting settings manager and loading pre-registration plugins");
 
         ret = FALSE;
 
@@ -384,17 +419,35 @@ cinnamon_settings_manager_start (CinnamonSettingsManager *manager,
         g_debug ("loading PNPIDs");
         manager->priv->pnp_ids = gnome_pnp_ids_new ();
 
-        cinnamon_settings_profile_start ("initializing plugins");
+        cinnamon_settings_profile_start ("initializing pre-registration plugins");
         manager->priv->settings = g_settings_new (DEFAULT_SETTINGS_PREFIX ".plugins");
 
-        _load_all (manager);
-        cinnamon_settings_profile_end ("initializing plugins");
+        /* load system plugins */
+        _load_dir (manager, CINNAMON_SETTINGS_PLUGINDIR G_DIR_SEPARATOR_S);
+
+        manager->priv->plugins = g_slist_sort (manager->priv->plugins, (GCompareFunc) compare_priority);
+        start_pre_registration_modules (manager);
+
+        cinnamon_settings_profile_end ("initializing pre-registration plugins");
 
         ret = TRUE;
  out:
         cinnamon_settings_profile_end (NULL);
 
         return ret;
+}
+
+void
+cinnamon_settings_manager_do_post_reg_plugins (CinnamonSettingsManager *manager)
+{
+        g_debug ("Loading post-registration plugins");
+
+        cinnamon_settings_profile_start ("initializing post-registration plugins");
+
+        manager->priv->plugins = g_slist_sort (manager->priv->plugins, (GCompareFunc) compare_priority);
+        start_post_registration_modules (manager);
+
+        cinnamon_settings_profile_end ("initializing post-registration plugins");
 }
 
 void

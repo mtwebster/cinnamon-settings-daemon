@@ -520,8 +520,6 @@ main (int argc, char *argv[])
 
         notify_init ("cinnamon-settings-daemon");
 
-        queue_register_client ();
-
         bus_register ();
 
         cinnamon_settings_profile_start ("cinnamon_settings_manager_new");
@@ -544,6 +542,10 @@ main (int argc, char *argv[])
                 g_timeout_add_seconds (30, (GSourceFunc) timed_exit_cb, NULL);
         }
 
+        queue_register_client ();
+
+        cinnamon_settings_manager_do_post_reg_plugins (manager);
+        
         gtk_main ();
 
         g_debug ("Shutting down");

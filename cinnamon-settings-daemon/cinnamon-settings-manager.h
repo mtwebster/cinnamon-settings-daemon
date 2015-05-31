@@ -63,6 +63,8 @@ GType                  cinnamon_settings_manager_get_type   (void);
 CinnamonSettingsManager * cinnamon_settings_manager_new        (void);
 gboolean               cinnamon_settings_manager_start      (CinnamonSettingsManager *manager,
                                                           GError              **error);
+void                   cinnamon_settings_manager_do_post_reg_plugins (CinnamonSettingsManager *manager);
+
 void                   cinnamon_settings_manager_stop       (CinnamonSettingsManager *manager);
 
 G_END_DECLS
