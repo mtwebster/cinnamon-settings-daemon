@@ -9,9 +9,9 @@ enabled_plugins =	\
 	color		\
 	cursor		\
 	dummy		\
-    datetime    \
+	datetime	\
 	power		\
-	housekeeping    \
+	housekeeping	\
 	keyboard	\
 	media-keys	\
 	mouse		\

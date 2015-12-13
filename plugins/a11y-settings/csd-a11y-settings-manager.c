@@ -45,6 +45,8 @@ struct CsdA11ySettingsManagerPrivate
 {
         GSettings *interface_settings;
         GSettings *a11y_apps_settings;
+
+        GHashTable       *bind_table;
 };
 
 enum {
@@ -58,6 +60,112 @@ static void     csd_a11y_settings_manager_finalize    (GObject                  
 G_DEFINE_TYPE (CsdA11ySettingsManager, csd_a11y_settings_manager, G_TYPE_OBJECT)
 
 static gpointer manager_object = NULL;
+
+#define CINNAMON_A11Y_APP_SCHEMA "org.cinnamon.desktop.a11y.applications"
+#define CINNAMON_DESKTOP_SCHEMA "org.cinnamon.desktop.interface"
+
+#define GNOME_A11Y_APP_SCHEMA "org.gnome.desktop.a11y.applications"
+#define GNOME_DESKTOP_SCHEMA "org.gnome.desktop.interface"
+
+static void
+bound_key_changed (GSettings *settings,
+                   gchar     *key,
+                   gpointer   user_data)
+{
+    GSettings *other_settings = G_SETTINGS (user_data);
+
+    g_signal_handlers_block_by_func (settings, bound_key_changed, other_settings);
+    g_signal_handlers_block_by_func (other_settings, bound_key_changed, settings);
+
+    g_settings_set_boolean (other_settings, key, g_settings_get_boolean (settings, key));
+
+    g_signal_handlers_unblock_by_func (settings, bound_key_changed, other_settings);
+    g_signal_handlers_unblock_by_func (other_settings, bound_key_changed, settings);
+}
+
+static void
+bind_keys (CsdA11ySettingsManager *manager,
+           const gchar            *schema_id_a,
+           const gchar            *schema_id_b,
+           const gchar            *key)
+{
+    GSettingsSchemaSource *source = g_settings_schema_source_get_default ();
+
+    /* We assume any schema_id_a will exist (since it's our's) */
+
+    GSettingsSchema *schema = g_settings_schema_source_lookup (source, schema_id_b, FALSE);
+
+    if (!schema)
+        return;
+
+    if (!g_settings_schema_has_key (schema, key))
+        return;
+
+    g_settings_schema_unref (schema);
+
+    if (!manager->priv->bind_table) {
+        manager->priv->bind_table = g_hash_table_new_full (g_direct_hash, g_str_equal, g_free, g_object_unref);
+    }
+
+    GSettings *a_settings = NULL;
+    GSettings *b_settings = NULL;
+
+    a_settings = g_hash_table_lookup (manager->priv->bind_table, schema_id_a);
+
+    if (!a_settings) {
+        a_settings = g_settings_new (schema_id_a);
+        g_hash_table_insert (manager->priv->bind_table, g_strdup (schema_id_a), a_settings);
+    }
+
+    b_settings = g_hash_table_lookup (manager->priv->bind_table, schema_id_b);
+
+    if (!b_settings) {
+        b_settings = g_settings_new (schema_id_b);
+        g_hash_table_insert (manager->priv->bind_table, g_strdup (schema_id_b), b_settings);
+    }
+
+    /* initial sync */
+    g_settings_set_boolean (b_settings,
+                            key,
+                            g_settings_get_boolean (a_settings,
+                                                    key));
+
+    gchar *detailed_signal = g_strdup_printf ("changed::%s", key);
+
+    g_signal_connect (a_settings, detailed_signal, G_CALLBACK (bound_key_changed), b_settings);
+    g_signal_connect (b_settings, detailed_signal, G_CALLBACK (bound_key_changed), a_settings);
+
+    g_free (detailed_signal);
+}
+
+static void
+bind_cinnamon_gnome_a11y_settings (CsdA11ySettingsManager *manager)
+{
+    bind_keys (manager, CINNAMON_A11Y_APP_SCHEMA, GNOME_A11Y_APP_SCHEMA, "screen-keyboard-enabled");
+    bind_keys (manager, CINNAMON_A11Y_APP_SCHEMA, GNOME_A11Y_APP_SCHEMA, "screen-reader-enabled");
+    bind_keys (manager, CINNAMON_DESKTOP_SCHEMA, GNOME_DESKTOP_SCHEMA, "toolkit-accessibility");
+}
+
+static void
+hash_table_foreach_disconnect (gpointer key,
+                               gpointer value,
+                               gpointer user_data)
+{
+    g_signal_handlers_disconnect_matched (G_SETTINGS (value),
+                                          G_SIGNAL_MATCH_FUNC,
+                                          0,
+                                          0,
+                                          NULL,
+                                          bound_key_changed,
+                                          NULL);
+}
+
+static void
+unbind_cinnamon_gnome_a11y_settings (CsdA11ySettingsManager *manager)
+{
+    g_hash_table_foreach (manager->priv->bind_table, (GHFunc) hash_table_foreach_disconnect, manager);
+    g_clear_pointer (&manager->priv->bind_table, g_hash_table_destroy);
+}
 
 static void
 apps_settings_changed (GSettings              *settings,
@@ -105,13 +213,19 @@ csd_a11y_settings_manager_start (CsdA11ySettingsManager *manager,
 	    g_settings_get_boolean (manager->priv->a11y_apps_settings, "screen-reader-enabled"))
 		g_settings_set_boolean (manager->priv->interface_settings, "toolkit-accessibility", TRUE);
 
-        cinnamon_settings_profile_end (NULL);
-        return TRUE;
+    /* Some accessibility applications (like orca) are hardcoded to look at the gnome
+       a11y applications schema - mirror them */
+    bind_cinnamon_gnome_a11y_settings (manager);
+
+    cinnamon_settings_profile_end (NULL);
+    return TRUE;
 }
 
 void
 csd_a11y_settings_manager_stop (CsdA11ySettingsManager *manager)
 {
+    unbind_cinnamon_gnome_a11y_settings (manager);
+
 	if (manager->priv->interface_settings) {
 		g_object_unref (manager->priv->interface_settings);
 		manager->priv->interface_settings = NULL;
@@ -160,6 +274,7 @@ csd_a11y_settings_manager_init (CsdA11ySettingsManager *manager)
 {
         manager->priv = CSD_A11Y_SETTINGS_MANAGER_GET_PRIVATE (manager);
 
+        manager->priv->bind_table = NULL;
 }
 
 static void
