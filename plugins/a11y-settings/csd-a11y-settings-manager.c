@@ -35,6 +35,7 @@
 #include <gdk/gdk.h>
 #include <gdk/gdkx.h>
 #include <gtk/gtk.h>
+#include <libnotify/notify.h>
 
 #include "cinnamon-settings-profile.h"
 #include "csd-a11y-settings-manager.h"
@@ -168,6 +169,21 @@ unbind_cinnamon_gnome_a11y_settings (CsdA11ySettingsManager *manager)
 }
 
 static void
+on_notification_closed (NotifyNotification     *notification,
+                        CsdA11ySettingsManager *manager)
+{
+    g_object_unref (notification);
+}
+
+static void
+on_notification_action_clicked (NotifyNotification     *notification,
+                                const char             *action,
+                                CsdA11ySettingsManager *manager)
+{
+    g_spawn_command_line_async ("cinnamon-settings universal-access", NULL);
+}
+
+static void
 apps_settings_changed (GSettings              *settings,
 		       const char             *key,
 		       CsdA11ySettingsManager *manager)
@@ -190,6 +206,41 @@ apps_settings_changed (GSettings              *settings,
 		g_debug ("Disabling toolkit-accessibility, screen reader and OSK disabled");
 		g_settings_set_boolean (manager->priv->interface_settings, "toolkit-accessibility", FALSE);
 	}
+
+    if (screen_reader) {
+        gchar *orca_path = g_find_program_in_path ("orca");
+
+        if (orca_path == NULL) {
+            NotifyNotification *notification = notify_notification_new (_("Screen reader not found."),
+                                                                        _("Please install the 'orca' package."),
+                                                                        "preferences-desktop-accessibility");
+
+            notify_notification_set_urgency (notification, NOTIFY_URGENCY_CRITICAL);
+
+            notify_notification_add_action (notification,
+                                            "open-cinnamon-settings",
+                                            _("Open accessibility settings"),
+                                            (NotifyActionCallback) on_notification_action_clicked,
+                                            manager,
+                                            NULL);
+
+            g_signal_connect (notification,
+                              "closed",
+                              G_CALLBACK (on_notification_closed),
+                              manager);
+
+            GError *error = NULL;
+
+            gboolean res = notify_notification_show (notification, &error);
+            if (!res) {
+                g_warning ("CsdA11ySettingsManager: unable to show notification: %s", error->message);
+                g_error_free (error);
+                notify_notification_close (notification, NULL);
+            }
+        }
+
+        g_free (orca_path);
+    }
 }
 
 gboolean
