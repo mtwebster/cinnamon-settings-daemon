@@ -4430,6 +4430,8 @@ device_to_variant_blob (UpDevice *device)
 
         icon = gpm_upower_get_device_icon (device, TRUE);
         device_icon = g_icon_to_string (icon);
+
+
         g_object_get (device,
                       "vendor", &vendor,
                       "model", &model,
@@ -4440,6 +4442,17 @@ device_to_variant_blob (UpDevice *device)
                       "time-to-empty", &time_empty,
                       "time-to-full", &time_full,
                       NULL);
+
+        /* upower < 0.99.5 compatibility */
+        if (g_object_class_find_property (G_OBJECT_GET_CLASS (device), "battery-level"))
+                g_object_get (device,
+                              "battery-level", &battery_level,
+                              NULL);
+        }
+        else
+        {
+                battery_level = UP_DEVICE_LEVEL_NONE;
+        }
 
         /* only return time for these simple states */
         if (state == UP_DEVICE_STATE_DISCHARGING)
