@@ -581,7 +581,7 @@ get_window_scale (CinnamonSettingsXSettingsManager *manager)
                                              NULL,
                                              &error);
         if (!current_state) {
-                g_warning ("Failed to get current display configuration state: %s",
+                g_debug ("Failed to get current display configuration state: %s",
                            error->message);
                 return 1;
         }
@@ -1107,7 +1107,7 @@ animations_enabled_changed (CinnamonSettingsXSettingsManager *manager)
                                                NULL,
                                                &error);
             if (!res) {
-                    g_warning ("Failed to get AnimationsEnabled state from Cinnamon: %s",
+                    g_debug ("Failed to get AnimationsEnabled state from Cinnamon: %s",
                                error->message);
             } else {
                 g_variant_get (res, "(v)", &animations_enabled_variant);
