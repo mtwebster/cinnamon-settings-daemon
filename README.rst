@@ -82,9 +82,6 @@ An example script which can be used for such a command is available in ``plugins
 media-keys
 ----------
 
-orientation
------------
-
 power
 -----
 
