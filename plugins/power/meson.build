@@ -90,6 +90,24 @@ if gudev.found()
     endif
 endif
 
+kbd_backlight_sources = [
+    'csd-kbd-backlight-helper.c',
+]
+
+executable(
+    'csd-kbd-backlight-helper',
+    kbd_backlight_sources,
+    include_directories: [include_dirs, common_inc],
+    dependencies: [gio, glib],
+    install: true,
+    install_dir: libexecdir,
+)
+
+meson.add_install_script(ln_script, libexecdir, bindir, 'csd-kbd-backlight-helper')
+if libexecdir != pkglibdir
+    meson.add_install_script(ln_script, libexecdir, pkglibdir, 'csd-kbd-backlight-helper')
+endif
+
 configure_file(
     input: 'cinnamon-settings-daemon-power.desktop.in',
     output: 'cinnamon-settings-daemon-power.desktop',

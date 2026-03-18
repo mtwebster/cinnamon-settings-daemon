@@ -137,8 +137,10 @@ struct CsdPowerManagerPrivate
         GDBusConnection         *connection;
         GCancellable            *bus_cancellable;
         GDBusProxy              *upower_kbd_proxy;
+        gboolean                 use_kbd_helper;
+        gint                     kbd_helper_step;
         gboolean                 skip_unsupported_xrandr;
-        gboolean				backlight_helper_force;
+        gboolean                 backlight_helper_force;
         gchar*                  backlight_helper_preference_args;
         gint                     kbd_brightness_now;
         gint                     kbd_brightness_max;
@@ -1871,9 +1873,91 @@ do_power_action_type (CsdPowerManager *manager,
         }
 }
 
+static gint64
+kbd_backlight_helper_get_value (const gchar *argument, GError **error)
+{
+        gboolean ret;
+        gchar *stdout_data = NULL;
+        gint exit_status = 0;
+        gint64 value = -1;
+        gchar *command = NULL;
+        gchar *endptr = NULL;
+
+        command = g_strdup_printf ("pkexec " LIBEXECDIR "/csd-kbd-backlight-helper --%s",
+                                   argument);
+        ret = g_spawn_command_line_sync (command,
+                                         &stdout_data,
+                                         NULL,
+                                         &exit_status,
+                                         error);
+        g_free (command);
+        if (!ret)
+                goto out;
+
+        if (WEXITSTATUS (exit_status) != 0) {
+                g_set_error (error,
+                             CSD_POWER_MANAGER_ERROR,
+                             CSD_POWER_MANAGER_ERROR_FAILED,
+                             "csd-kbd-backlight-helper failed: %s",
+                             stdout_data ? stdout_data : "No reason");
+                goto out;
+        }
+
+        value = g_ascii_strtoll (stdout_data, &endptr, 10);
+        if (endptr == stdout_data) {
+                g_set_error (error,
+                             CSD_POWER_MANAGER_ERROR,
+                             CSD_POWER_MANAGER_ERROR_FAILED,
+                             "failed to parse value: %s",
+                             stdout_data);
+                value = -1;
+                goto out;
+        }
+out:
+        g_free (stdout_data);
+        return value;
+}
+
+static gboolean
+kbd_backlight_helper_set_value (gint value, GError **error)
+{
+        gboolean ret;
+        gint exit_status = 0;
+        gchar *command = NULL;
+
+        command = g_strdup_printf ("pkexec " LIBEXECDIR "/csd-kbd-backlight-helper --set-brightness %i",
+                                   value);
+        ret = g_spawn_command_line_sync (command,
+                                         NULL,
+                                         NULL,
+                                         &exit_status,
+                                         error);
+        g_free (command);
+        if (!ret)
+                return FALSE;
+
+        if (WEXITSTATUS (exit_status) != 0) {
+                g_set_error (error,
+                             CSD_POWER_MANAGER_ERROR,
+                             CSD_POWER_MANAGER_ERROR_FAILED,
+                             "csd-kbd-backlight-helper --set-brightness failed");
+                return FALSE;
+        }
+
+        return TRUE;
+}
+
 static gboolean
 upower_kbd_get_percentage (CsdPowerManager *manager, GError **error)
 {
+        if (manager->priv->use_kbd_helper) {
+                gint64 val = kbd_backlight_helper_get_value ("get-brightness", error);
+                if (val < 0)
+                        return FALSE;
+                manager->priv->kbd_brightness_now = (gint) val / manager->priv->kbd_helper_step;
+                return TRUE;
+        }
+
         GVariant *k_now = NULL;
 
         k_now = g_dbus_proxy_call_sync (manager->priv->upower_kbd_proxy,
@@ -1905,11 +1989,20 @@ upower_kbd_emit_changed (CsdPowerManager *manager)
 static gboolean
 upower_kbd_set_brightness (CsdPowerManager *manager, guint value, GError **error)
 {
-        GVariant *retval;
-
         /* same as before */
         if (manager->priv->kbd_brightness_now == value)
                 return TRUE;
+
+        if (manager->priv->use_kbd_helper) {
+                gint raw = (gint) value * manager->priv->kbd_helper_step;
+                if (!kbd_backlight_helper_set_value (raw, error))
+                        return FALSE;
+                manager->priv->kbd_brightness_now = value;
+                upower_kbd_emit_changed (manager);
+                return TRUE;
+        }
+
+        GVariant *retval;
 
         /* update h/w value */
         retval = g_dbus_proxy_call_sync (manager->priv->upower_kbd_proxy,
@@ -2849,7 +2942,8 @@ kbd_backlight_dim (CsdPowerManager *manager,
         gint max;
         gint now;
 
-        if (manager->priv->upower_kbd_proxy == NULL)
+        if (manager->priv->upower_kbd_proxy == NULL &&
+            !manager->priv->use_kbd_helper)
                 return TRUE;
 
         now = manager->priv->kbd_brightness_now;
@@ -2954,7 +3048,7 @@ idle_set_mode (CsdPowerManager *manager, CsdPowerIdleMode mode)
                 }
 
                 /* only toggle keyboard if present and not already toggled */
-                if (manager->priv->upower_kbd_proxy &&
+                if ((manager->priv->upower_kbd_proxy || manager->priv->use_kbd_helper) &&
                     manager->priv->kbd_brightness_old == -1) {
                         ret = upower_kbd_toggle (manager, &error);
                         if (!ret) {
@@ -3007,7 +3101,7 @@ idle_set_mode (CsdPowerManager *manager, CsdPowerIdleMode mode)
                 }
 
                 /* only toggle keyboard if present and already toggled off */
-                if (manager->priv->upower_kbd_proxy &&
+                if ((manager->priv->upower_kbd_proxy || manager->priv->use_kbd_helper) &&
                     manager->priv->kbd_brightness_old != -1) {
                         ret = upower_kbd_toggle (manager, &error);
                         if (!ret) {
@@ -3480,6 +3574,97 @@ session_presence_proxy_ready_cb (GObject *source_object,
                           G_CALLBACK (idle_dbus_signal_cb), manager);
 }
 
+static gint64
+kbd_backlight_helper_discover_step (void)
+{
+        GError *error = NULL;
+        gint64 original, readback;
+        gint lo = 1, hi = 255;
+        gint64 first_level = -1;
+
+        original = kbd_backlight_helper_get_value ("get-brightness", &error);
+        if (original < 0) {
+                g_clear_error (&error);
+                return -1;
+        }
+
+        /* Binary search for the lowest raw value that gives non-zero readback */
+        while (lo <= hi) {
+                gint mid = (lo + hi) / 2;
+
+                if (!kbd_backlight_helper_set_value (mid, &error)) {
+                        g_clear_error (&error);
+                        break;
+                }
+
+                readback = kbd_backlight_helper_get_value ("get-brightness", &error);
+                if (readback < 0) {
+                        g_clear_error (&error);
+                        break;
+                }
+
+                if (readback > 0) {
+                        first_level = readback;
+                        hi = mid - 1;
+                } else {
+                        lo = mid + 1;
+                }
+        }
+
+        /* Restore original */
+        kbd_backlight_helper_set_value ((gint) original, &error);
+        g_clear_error (&error);
+
+        return first_level;
+}
+
+static gboolean
+try_kbd_backlight_helper (CsdPowerManager *manager)
+{
+        GError *error = NULL;
+        gint64 k_max, k_now, step;
+
+        k_max = kbd_backlight_helper_get_value ("get-max-brightness", &error);
+        if (k_max < 0) {
+                g_debug ("kbd backlight helper: no device found: %s",
+                         error ? error->message : "unknown");
+                g_clear_error (&error);
+                return FALSE;
+        }
+
+        k_now = kbd_backlight_helper_get_value ("get-brightness", &error);
+        if (k_now < 0) {
+                g_warning ("kbd backlight helper: failed to get brightness: %s",
+                           error ? error->message : "unknown");
+                g_clear_error (&error);
+                return FALSE;
+        }
+
+        /* If max is 255, the backend likely needs level discovery (VIA/HID).
+         * For sysfs backends, max is typically small and values map directly. */
+        if (k_max == 255) {
+                step = kbd_backlight_helper_discover_step ();
+                if (step <= 0) {
+                        g_warning ("kbd backlight helper: failed to discover step size");
+                        return FALSE;
+                }
+                manager->priv->kbd_helper_step = (gint) step;
+                manager->priv->kbd_brightness_max = 255 / (gint) step;
+                manager->priv->kbd_brightness_now = (gint) k_now / (gint) step;
+        } else {
+                manager->priv->kbd_helper_step = 1;
+                manager->priv->kbd_brightness_max = (gint) k_max;
+                manager->priv->kbd_brightness_now = (gint) k_now;
+        }
+
+        manager->priv->use_kbd_helper = TRUE;
+        g_debug ("Using kbd backlight helper: brightness %d/%d (step=%d)",
+                 manager->priv->kbd_brightness_now,
+                 manager->priv->kbd_brightness_max,
+                 manager->priv->kbd_helper_step);
+        return TRUE;
+}
+
 static void
 power_keyboard_proxy_ready_cb (GObject             *source_object,
                                GAsyncResult        *res,
@@ -3492,10 +3677,10 @@ power_keyboard_proxy_ready_cb (GObject             *source_object,
 
         manager->priv->upower_kbd_proxy = g_dbus_proxy_new_for_bus_finish (res, &error);
         if (manager->priv->upower_kbd_proxy == NULL) {
-                g_warning ("Could not connect to UPower: %s",
-                           error->message);
+                g_debug ("Could not connect to UPower KbdBacklight: %s",
+                         error->message);
                 g_error_free (error);
-                goto out;
+                goto try_helper;
         }
 
         k_now = g_dbus_proxy_call_sync (manager->priv->upower_kbd_proxy,
@@ -3512,7 +3697,7 @@ power_keyboard_proxy_ready_cb (GObject             *source_object,
                                    error->message);
                 }
                 g_error_free (error);
-                goto out;
+                goto try_helper;
         }
 
         k_max = g_dbus_proxy_call_sync (manager->priv->upower_kbd_proxy,
@@ -3525,7 +3710,7 @@ power_keyboard_proxy_ready_cb (GObject             *source_object,
         if (k_max == NULL) {
                 g_warning ("Failed to get max brightness: %s", error->message);
                 g_error_free (error);
-                goto out;
+                goto try_helper;
         }
 
         g_signal_connect (manager->priv->upower_kbd_proxy, "g-signal", G_CALLBACK(upower_kbd_handle_changed), manager);
@@ -3547,6 +3732,13 @@ power_keyboard_proxy_ready_cb (GObject             *source_object,
                         g_error_free (error);
                 }
         }
+
+        goto out;
+
+try_helper:
+        /* UPower KbdBacklight not available, try the helper */
+        try_kbd_backlight_helper (manager);
+
 out:
         if (k_now != NULL)
                 g_variant_unref (k_now);

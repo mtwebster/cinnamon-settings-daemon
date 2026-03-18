@@ -28,5 +28,20 @@
     <annotate key="org.freedesktop.policykit.exec.path">@libexecdir@/csd-backlight-helper</annotate>
   </action>
 
+  <action id="org.cinnamon.settings-daemon.plugins.power.kbd-backlight-helper">
+    <!-- SECURITY:
+          - A normal active user on the local machine does not need permission
+            to change the keyboard backlight brightness.
+     -->
+    <description>Modify the keyboard backlight brightness</description>
+    <message>Authentication is required to modify the keyboard backlight brightness</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">@libexecdir@/csd-kbd-backlight-helper</annotate>
+  </action>
+
 </policyconfig>
 
