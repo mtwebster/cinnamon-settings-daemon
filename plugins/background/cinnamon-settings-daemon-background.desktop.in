@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Cinnamon Settings Daemon - background
-Exec=csd-background
-OnlyShowIn=X-Cinnamon;
-NoDisplay=true
-X-GNOME-AutoRestart=true

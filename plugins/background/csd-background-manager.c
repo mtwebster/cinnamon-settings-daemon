@@ -199,7 +199,7 @@ prune_pixbuf_cache (CsdBackgroundManager *m)
     if (single && single[0] != '\0')
         g_hash_table_add (keep, (gpointer) single);
 
-    GListModel *items = cinnamon_bg_list_get_items (m->bglist);
+    GListModel *items = G_LIST_MODEL (m->bglist);
     guint n = g_list_model_get_n_items (items);
     for (guint i = 0; i < n; i++) {
         g_autoptr(CinnamonBgItem) item = g_list_model_get_item (items, i);
@@ -571,7 +571,7 @@ monitor_index_for_connector (CsdBackgroundManager *m, const char *connector)
     if (!m->bg_monitors)
         return -1;
 
-    GListModel *model = cinnamon_bg_monitors_get_monitors (m->bg_monitors);
+    GListModel *model = G_LIST_MODEL (m->bg_monitors);
     guint n = g_list_model_get_n_items (model);
 
     for (guint i = 0; i < n; i++) {

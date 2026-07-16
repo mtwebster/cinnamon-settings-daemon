@@ -45,15 +45,9 @@ if libexecdir != pkglibdir
     meson.add_install_script(ln_script, libexecdir, pkglibdir, 'csd-background')
 endif
 
-configure_file(
-    input: 'cinnamon-settings-daemon-background.desktop.in',
-    output: 'cinnamon-settings-daemon-background.desktop',
-    configuration: desktop_conf,
-    install_dir: autostartdir,
-)
-
-# Session-bus activation: lets the well-known name be started on demand so a
-# readiness watcher can trigger it early and wait on name ownership.
+# No autostart .desktop: session-bus activation is the sole launcher. Cinnamon
+# activates the name at startup (and re-activates it if it vanishes), so a
+# cinnamon-session autostart would only ever lose the single-instance race.
 background_service_conf = configuration_data()
 background_service_conf.set('LIBEXECDIR', join_paths(prefix, libexecdir))
 configure_file(
