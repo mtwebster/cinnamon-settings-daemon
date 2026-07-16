@@ -1,0 +1,29 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <!--
+    org.cinnamon.SettingsDaemon.Background:
+
+    Exported by csd-background on the session bus, on the well-known name
+    org.cinnamon.SettingsDaemon.Background at object path
+    /org/cinnamon/SettingsDaemon/Background (alongside org.freedesktop.Application).
+
+    The service is D-Bus activatable, so a watcher can start it early and follow
+    State to know when the wallpaper is actually on screen.
+  -->
+  <interface name="org.cinnamon.SettingsDaemon.Background">
+    <!--
+      State:
+
+      Readiness of the background daemon. Watch the property's change
+      notification; it begins at INITIALIZING and reaches READY once the
+      wallpaper has been painted on every monitor.
+
+        0 = INITIALIZING  (running, loading/painting; nothing shown yet)
+        1 = READY         (wallpaper painted on all monitors)
+
+      More states may be added later; treat any unknown value as "not READY".
+    -->
+    <property name="State" type="u" access="read"/>
+  </interface>
+</node>

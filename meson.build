@@ -97,6 +97,12 @@ if gtk_layer_shell_enabled
     wayland_client = dependency('wayland-client', required: true)
 endif
 
+gtk4 = dependency('gtk4', version: '>= 4.10')
+gtk4_layer_shell = dependency('gtk4-layer-shell-0', version: '>= 1.0')
+x11_dep = dependency('x11')
+cairo_xlib = dependency('cairo-xlib')
+cinnamon_bg_dep = dependency('cinnamon-bg', version: cinnamon_desktop_required)
+
 cc = meson.get_compiler('c')
 math = cc.find_library('m', required: false)
 
