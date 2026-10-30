@@ -27,6 +27,16 @@
 
 G_BEGIN_DECLS
 
+/* on ACPI machines we have 4-16 levels, on others it's ~150 */
+#define BRIGHTNESS_STEP_AMOUNT(max) ((max) < 20 ? 1 : (max) / 20)
+
+/* take a discrete value with offset and convert to percentage */
+#define ABS_TO_PERCENTAGE(min, max, value) abs_to_percentage(min, max, value)
+#define PERCENTAGE_TO_ABS(min, max, value) (min + (((max - min) * value) / 100))
+
+gint             abs_to_percentage                      (gint            min,
+                                                         gint            max,
+                                                         gint            value);
 gchar           *gpm_get_timestring                     (guint           time);
 GIcon           *gpm_upower_get_device_icon             (UpDevice       *device,
                                                          gboolean        use_symbolic);

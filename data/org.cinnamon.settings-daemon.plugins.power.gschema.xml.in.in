@@ -5,6 +5,11 @@
       <summary>Enable the ambient light sensor</summary>
       <description>If the ambient light sensor functionality is enabled.</description>
     </key>
+    <key name="ambient-light-curve" type="ad">
+      <default>[0, 5, 50, 300, 1000, 5000]</default>
+      <summary>Ambient light levels, in lux, at which the display is set to 0, 20, 40, 60, 80 and 100 percent</summary>
+      <description>Adjusting brightness while the ambient light sensor is enabled reshapes this curve so the current light level maps to the chosen brightness.</description>
+    </key>
     <key name="idle-brightness" type="i">
       <default>30</default>
       <summary>The brightness of the screen when idle</summary>
@@ -135,21 +140,6 @@
       <default>false</default>
       <summary>If the computer should lock when entering suspend mode</summary>
       <description>If the computer should lock during suspend - replaces ubuntu-lock-on-suspend</description>
-    </key>
-    <key name="backlight-helper-force" type="b">
-	  <default>false</default>
-	  <summary>Use the backlight helper application by default</summary>
-	  <description>Setting this to true forces cinnamon-settings-daemon to use the backlight helper application
-	  to provide backlight control. This will usually fix backlight control problems on laptops where X11 picks
-	  the wrong interface, or uses an interface incorrectly. Adjust backlight-preference-order if the default
-	  selection logic still chooses the wrong interface.</description>
-	</key>
-    <key name="backlight-helper-preference-order" type="as">
-      <default>['firmware','platform','raw']</default>
-      <summary>Search order for backlight control interfaces</summary>
-      <description>Controls the type of interfaces the backlight-helper will search for to control the backlight.
-	This can be useful for working around systems with broken default backlight control behavior which provide
-	multiple interfaces. If you are having problems, try setting 'raw' to a higher priority.</description>
     </key>
     <key name="inhibit-lid-switch" type="b">
       <default>true</default>
