@@ -8,11 +8,18 @@
     </property>
     <property name='Percentage' type='u' access='read'>
     </property>
+    <property name='PowerProfilesAvailable' type='as' access='read'>
+    </property>
+    <property name='ActivePowerProfile' type='s' access='read'>
+    </property>
     <method name='GetPrimaryDevice'>
       <arg name='device' type='(sssusduut)' direction='out' />
     </method>
     <method name='GetDevices'>
       <arg name='devices' type='a(sssusduut)' direction='out' />
+    </method>
+    <method name='SetPowerProfile'>
+      <arg name='profile' type='s' direction='in' />
     </method>
   </interface>
 </node>

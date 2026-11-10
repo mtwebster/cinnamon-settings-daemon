@@ -166,5 +166,15 @@
       <summary>Low battery notifications for other connected devices</summary>
       <description>Whether to show low battery notifications for connected devices other than keyboards and mice.</description>
     </key>
+    <key name="power-profile-ac" type="s">
+      <default>'balanced'</default>
+      <summary>Power profile when on AC power</summary>
+      <description>The power-profiles-daemon profile to activate when the computer is plugged in.</description>
+    </key>
+    <key name="power-profile-battery" type="s">
+      <default>'power-saver'</default>
+      <summary>Power profile when on battery power</summary>
+      <description>The power-profiles-daemon profile to activate when the computer is running on battery. It's left alone if the profile isn't available.</description>
+    </key>
   </schema>
 </schemalist>

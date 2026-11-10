@@ -63,6 +63,11 @@
 #define UPOWER_DBUS_PATH_KBDBACKLIGHT           "/org/freedesktop/UPower/KbdBacklight"
 #define UPOWER_DBUS_INTERFACE_KBDBACKLIGHT      "org.freedesktop.UPower.KbdBacklight"
 
+#define POWER_PROFILES_DBUS_NAME                "org.freedesktop.UPower.PowerProfiles"
+#define POWER_PROFILES_DBUS_PATH                "/org/freedesktop/UPower/PowerProfiles"
+#define POWER_PROFILES_DBUS_NAME_LEGACY         "net.hadess.PowerProfiles"
+#define POWER_PROFILES_DBUS_PATH_LEGACY         "/net/hadess/PowerProfiles"
+
 #define CSD_POWER_SETTINGS_SCHEMA               "org.cinnamon.settings-daemon.plugins.power"
 #define CSD_SAVER_SETTINGS_SCHEMA               "org.cinnamon.desktop.screensaver"
 #define CSD_SESSION_SETTINGS_SCHEMA             "org.cinnamon.desktop.session"
@@ -178,6 +183,9 @@ struct CsdPowerManagerPrivate
         GDBusProxy              *iio_proxy;
         guint                    iio_proxy_watch_id;
         GCancellable            *iio_cancellable;
+
+        GDBusProxy              *power_profiles_proxy;
+        GCancellable            *power_profiles_cancellable;
 
         gboolean                 light_claimed;
         gboolean                 ambient_level_fresh;
@@ -2788,11 +2796,210 @@ idle_configure (CsdPowerManager *manager)
         refresh_idle_dim_settings (manager);
 }
 
+static const gchar *
+power_profile_get_key (CsdPowerManager *manager)
+{
+        return up_client_get_on_battery (manager->priv->up_client) ? "power-profile-battery"
+                                                                   : "power-profile-ac";
+}
+
+static GStrv
+power_profiles_get_available (CsdPowerManager *manager)
+{
+        GDBusProxy *proxy = manager->priv->power_profiles_proxy;
+        g_autoptr(GVariant) profiles = NULL;
+        GPtrArray *names = g_ptr_array_new ();
+        GVariantIter iter;
+        GVariant *item;
+
+        if (proxy != NULL)
+                profiles = g_dbus_proxy_get_cached_property (proxy, "Profiles");
+
+        if (profiles != NULL) {
+                g_variant_iter_init (&iter, profiles);
+                while (g_variant_iter_next (&iter, "@a{sv}", &item)) {
+                        const gchar *name = NULL;
+
+                        if (g_variant_lookup (item, "Profile", "&s", &name))
+                                g_ptr_array_add (names, g_strdup (name));
+                        g_variant_unref (item);
+                }
+        }
+
+        g_ptr_array_add (names, NULL);
+
+        return (GStrv) g_ptr_array_free (names, FALSE);
+}
+
+static gchar *
+power_profiles_get_active (CsdPowerManager *manager)
+{
+        g_autoptr(GVariant) active = NULL;
+
+        if (manager->priv->power_profiles_proxy != NULL)
+                active = g_dbus_proxy_get_cached_property (manager->priv->power_profiles_proxy,
+                                                           "ActiveProfile");
+
+        return active != NULL ? g_variant_dup_string (active, NULL) : NULL;
+}
+
+static void
+power_profiles_update_iface (CsdPowerManager *manager)
+{
+        g_auto(GStrv) available = NULL;
+        g_autofree gchar *active = NULL;
+
+        if (manager->priv->power_iface == NULL)
+                return;
+
+        available = power_profiles_get_available (manager);
+        active = power_profiles_get_active (manager);
+        csd_power_set_power_profiles_available (manager->priv->power_iface,
+                                                (const gchar * const *) available);
+        csd_power_set_active_power_profile (manager->priv->power_iface,
+                                            active != NULL ? active : "");
+}
+
+static void
+power_profile_set_cb (GObject      *source,
+                      GAsyncResult *res,
+                      gpointer      user_data)
+{
+        g_autoptr(GError) error = NULL;
+        g_autoptr(GVariant) ret = NULL;
+
+        ret = g_dbus_proxy_call_finish (G_DBUS_PROXY (source), res, &error);
+        if (ret == NULL && !g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+                g_warning ("Could not set the power profile: %s", error->message);
+}
+
+static gboolean
+power_profile_set (CsdPowerManager *manager,
+                   const gchar     *profile)
+{
+        GDBusProxy *proxy = manager->priv->power_profiles_proxy;
+        g_auto(GStrv) available = NULL;
+        g_autofree gchar *active = NULL;
+
+        available = power_profiles_get_available (manager);
+        if (!g_strv_contains ((const gchar * const *) available, profile))
+                return FALSE;
+
+        active = power_profiles_get_active (manager);
+        if (g_strcmp0 (profile, active) == 0)
+                return TRUE;
+
+        g_debug ("Switching power profile from '%s' to '%s'", active, profile);
+        g_dbus_proxy_call (proxy,
+                           "org.freedesktop.DBus.Properties.Set",
+                           g_variant_new ("(ssv)",
+                                          g_dbus_proxy_get_interface_name (proxy),
+                                          "ActiveProfile",
+                                          g_variant_new_string (profile)),
+                           G_DBUS_CALL_FLAGS_NONE,
+                           -1,
+                           manager->priv->power_profiles_cancellable,
+                           power_profile_set_cb,
+                           NULL);
+
+        return TRUE;
+}
+
+static void
+power_profile_apply (CsdPowerManager *manager)
+{
+        g_autofree gchar *active = NULL;
+        g_autofree gchar *wanted = NULL;
+
+        active = power_profiles_get_active (manager);
+        if (active == NULL)
+                return;
+
+        wanted = g_settings_get_string (manager->priv->settings, power_profile_get_key (manager));
+        if (!power_profile_set (manager, wanted))
+                g_warning ("Power profile '%s' is not available", wanted);
+}
+
+static void
+power_profile_setting_changed (CsdPowerManager *manager,
+                               const gchar     *key)
+{
+        if (manager->priv->power_profiles_proxy == NULL)
+                return;
+
+        if (g_strcmp0 (key, power_profile_get_key (manager)) == 0)
+                power_profile_apply (manager);
+}
+
+static void
+power_profiles_changed (CsdPowerManager *manager)
+{
+        power_profiles_update_iface (manager);
+        power_profile_apply (manager);
+}
+
+static void power_profiles_connect (CsdPowerManager *manager,
+                                    const gchar     *name,
+                                    const gchar     *path);
+
+static void
+power_profiles_proxy_ready_cb (GObject      *source,
+                               GAsyncResult *res,
+                               gpointer      user_data)
+{
+        CsdPowerManager *manager;
+        g_autoptr(GError) error = NULL;
+        g_autoptr(GDBusProxy) proxy = NULL;
+        g_autofree gchar *owner = NULL;
+
+        proxy = g_dbus_proxy_new_for_bus_finish (res, &error);
+        if (proxy == NULL) {
+                if (!g_error_matches (error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+                        g_warning ("Could not connect to power-profiles-daemon: %s", error->message);
+                return;
+        }
+
+        manager = CSD_POWER_MANAGER (user_data);
+
+        owner = g_dbus_proxy_get_name_owner (proxy);
+        if (owner == NULL &&
+            g_strcmp0 (g_dbus_proxy_get_name (proxy), POWER_PROFILES_DBUS_NAME) == 0) {
+                power_profiles_connect (manager,
+                                        POWER_PROFILES_DBUS_NAME_LEGACY,
+                                        POWER_PROFILES_DBUS_PATH_LEGACY);
+                return;
+        }
+
+        manager->priv->power_profiles_proxy = g_steal_pointer (&proxy);
+        g_signal_connect_swapped (manager->priv->power_profiles_proxy, "notify::g-name-owner",
+                                  G_CALLBACK (power_profiles_changed), manager);
+        g_signal_connect_swapped (manager->priv->power_profiles_proxy, "g-properties-changed",
+                                  G_CALLBACK (power_profiles_update_iface), manager);
+        power_profiles_changed (manager);
+}
+
+static void
+power_profiles_connect (CsdPowerManager *manager,
+                        const gchar     *name,
+                        const gchar     *path)
+{
+        g_dbus_proxy_new_for_bus (G_BUS_TYPE_SYSTEM,
+                                  G_DBUS_PROXY_FLAGS_NONE,
+                                  NULL,
+                                  name,
+                                  path,
+                                  name,
+                                  manager->priv->power_profiles_cancellable,
+                                  power_profiles_proxy_ready_cb,
+                                  manager);
+}
+
 static void
 up_client_on_battery_cb (UpClient *client,
                          GParamSpec *pspec,
                          CsdPowerManager *manager)
 {
+        power_profile_apply (manager);
         idle_configure (manager);
         lid_state_changed_cb(client, pspec, manager);
 }
@@ -3151,6 +3358,11 @@ engine_settings_key_changed_cb (GSettings *settings,
 
         if (g_strcmp0 (key, "ambient-enabled") == 0) {
                 iio_proxy_maybe_claim_light (manager);
+                return;
+        }
+
+        if (g_str_has_prefix (key, "power-profile-")) {
+                power_profile_setting_changed (manager, key);
                 return;
         }
 }
@@ -3918,6 +4130,9 @@ on_rr_screen_acquired (GObject      *object,
         g_signal_connect (manager->priv->up_client, "notify::on-battery",
                           G_CALLBACK (up_client_on_battery_cb), manager);
 
+        manager->priv->power_profiles_cancellable = g_cancellable_new ();
+        power_profiles_connect (manager, POWER_PROFILES_DBUS_NAME, POWER_PROFILES_DBUS_PATH);
+
         /* connect to UPower for keyboard backlight control */
         g_dbus_proxy_new_for_bus (G_BUS_TYPE_SYSTEM,
                                   G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES,
@@ -4093,6 +4308,13 @@ csd_power_manager_stop (CsdPowerManager *manager)
                                                       G_CALLBACK (iio_proxy_changed_cb),
                                                       manager);
         g_clear_object (&manager->priv->iio_proxy);
+
+        g_cancellable_cancel (manager->priv->power_profiles_cancellable);
+        g_clear_object (&manager->priv->power_profiles_cancellable);
+        if (manager->priv->power_profiles_proxy != NULL)
+                g_signal_handlers_disconnect_by_data (manager->priv->power_profiles_proxy, manager);
+        g_clear_object (&manager->priv->power_profiles_proxy);
+        power_profiles_update_iface (manager);
 
         g_signal_handlers_disconnect_by_data (manager->priv->up_client, manager);
 
@@ -4557,6 +4779,28 @@ power_iface_handle_get_devices (CsdPower              *object,
         return TRUE;
 }
 
+static gboolean
+power_iface_handle_set_power_profile (CsdPower              *object,
+                                      GDBusMethodInvocation *invocation,
+                                      const gchar           *profile,
+                                      gpointer               user_data)
+{
+        CsdPowerManager *manager = CSD_POWER_MANAGER (user_data);
+
+        if (!power_profile_set (manager, profile)) {
+                g_dbus_method_invocation_return_error (invocation,
+                                                       G_DBUS_ERROR,
+                                                       G_DBUS_ERROR_INVALID_ARGS,
+                                                       "Power profile '%s' is not available",
+                                                       profile);
+                return TRUE;
+        }
+
+        csd_power_complete_set_power_profile (object, invocation);
+
+        return TRUE;
+}
+
 static void
 connect_power_iface (CsdPowerManager *manager)
 {
@@ -4568,6 +4812,11 @@ connect_power_iface (CsdPowerManager *manager)
         g_signal_connect (manager->priv->power_iface,
                           "handle-get-devices",
                           G_CALLBACK (power_iface_handle_get_devices),
+                          manager);
+
+        g_signal_connect (manager->priv->power_iface,
+                          "handle-set-power-profile",
+                          G_CALLBACK (power_iface_handle_set_power_profile),
                           manager);
 
         engine_recalculate_state (manager);
@@ -4589,6 +4838,7 @@ power_name_acquired (GDBusConnection *connection,
                                           NULL);
 
         manager->priv->power_iface = iface;
+        power_profiles_update_iface (manager);
 }
 
 static void
